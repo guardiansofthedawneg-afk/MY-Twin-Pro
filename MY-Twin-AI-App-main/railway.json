@@ -8,6 +8,6 @@
     "restartPolicyMaxRetries": 10,
     "healthcheckPath": "/health",
     "healthcheckTimeout": 30,
-    "command": "pip install --upgrade pip && pip install -r backend/requirements.txt && uvicorn backend.main:app --host 0.0.0.0 --port $PORT"
+    "command": "cd backend && pip install -r requirements.txt && uvicorn main:app --host 0.0.0.0 --port $PORT"
   }
 }
