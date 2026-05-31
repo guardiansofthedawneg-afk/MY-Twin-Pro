@@ -1,30 +1,27 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { Text, TouchableOpacity, StyleSheet, Animated, Modal } from "react-native";
 import { router } from "expo-router";
 import { useTwinStore } from "../store/useTwinStore";
-import { supabase } from "../lib/supabase";
-import { setToken } from "../lib/api";
 import { COLORS } from "../utils/theme";
 import CustomDrawerContent from "../components/CustomDrawerContent";
 import { ToastProvider } from "../components/Toast";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-// تم نقل المكون للخارج لتحسين الأداء
 const SideMenu = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
   const slideAnim = useRef(new Animated.Value(-280)).current;
-  
-  useEffect(() => {
+
+  useRef(() => {
     Animated.timing(slideAnim, {
       toValue: visible ? 0 : -280,
       duration: 250,
       useNativeDriver: true,
     }).start();
-  }, [visible]);
+  });
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
           <CustomDrawerContent onClose={onClose} />
@@ -35,70 +32,19 @@ const SideMenu = ({ visible, onClose }: { visible: boolean; onClose: () => void 
 };
 
 export default function Layout() {
-  const { setAuth } = useTwinStore();
-  const initialized = useRef(false);
   const [menuVisible, setMenuVisible] = useState(false);
 
-  useEffect(() => {
-    // تهيئة Sentry (اختياري)
-    try {
-      const Sentry = require("@sentry/react-native");
-      if (Sentry && process.env.EXPO_PUBLIC_SENTRY_DSN) {
-        Sentry.init({ dsn: process.env.EXPO_PUBLIC_SENTRY_DSN, tracesSampleRate: 0.2 });
-      }
-    } catch { /* تجاهل الأخطاء إذا لم يكن Sentry مثبتاً */ }
-    if (initialized.current) return;
-    initialized.current = true;
-
-    // توجيه مبدئي لشاشة Splash
-    router.replace("/splash");
-
-    setTimeout(async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          setAuth(session.user.id);
-          setToken(session.access_token);
-          const { data: profile, error } = await supabase
-            .from("profiles")
-            .select("onboarded")
-            .eq("user_id", session.user.id)
-            .single();
-          
-          // معالجة الخطأ أو التوجيه الصحيح
-          if (error) {
-            console.warn("Profile fetch error:", error.message);
-            router.replace("/onboarding"); 
-          } else {
-            router.replace(profile?.onboarded ? "/chat" : "/onboarding");
-          }
-        } else {
-          router.replace("/login");
-        }
-      } catch (err) {
-        console.error("Auth check failed:", err);
-        router.replace("/login");
-      }
-    }, 2500);
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session) {
-        setAuth(session.user.id);
-        setToken(session.access_token);
-      } else {
-        setAuth("");
-        setToken("");
-        router.replace("/login");
-      }
-    });
-
-    return () => listener?.subscription.unsubscribe();
-  }, []);
-
-  return (    <ErrorBoundary>
+  return (
+    <ErrorBoundary>
       <ToastProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: COLORS.bg }, animation: "fade" }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#FFFFFF' },
+            animation: "fade",
+          }}
+        >
           <Stack.Screen name="index" />
           <Stack.Screen name="splash" />
           <Stack.Screen name="login" />
@@ -109,7 +55,10 @@ export default function Layout() {
             headerTitle: "",
             headerStyle: { backgroundColor: COLORS.header },
             headerLeft: () => (
-              <TouchableOpacity onPress={() => setMenuVisible(true)} style={{ marginLeft: 16 }}>
+              <TouchableOpacity
+                onPress={() => setMenuVisible(true)}
+                style={{ marginLeft: 16 }}
+              >
                 <Text style={{ fontSize: 24 }}>☰</Text>
               </TouchableOpacity>
             ),
