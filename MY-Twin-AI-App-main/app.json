@@ -1,6 +1,5 @@
 {
   "expo": {
-    "owner": "mohamed101",
     "name": "MyTwin",
     "slug": "mytwin-ai",
     "scheme": "mytwin",
@@ -76,14 +75,15 @@
         "origin": false
       },
       "eas": {
-        "projectId": "0ed029b8-4ba3-4902-87ec-5c3505bfc4c6"
+        "projectId": "b5e2baa3-6015-40a5-9f31-115298d3b0c9"
       }
     },
     "runtimeVersion": {
       "policy": "appVersion"
     },
     "updates": {
-      "url": "https://u.expo.dev/0ed029b8-4ba3-4902-87ec-5c3505bfc4c6"
-    }
+      "url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"
+    },
+    "owner": "mohamed101"
   }
 }
