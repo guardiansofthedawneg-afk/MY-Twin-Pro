@@ -1,16 +1,12 @@
-/**
- * MyTwin – Voice Engine
- * تسجيل الصوت، تحويله إلى نص، ونطق الردود بنبرة عاطفية.
- */
 import * as Speech from 'expo-speech';
 import { Audio } from 'expo-av';
 import { Animated } from 'react-native';
 import { API } from '../lib/api';
+import { useTwinStore } from '../store/useTwinStore';
 
 let recording: Audio.Recording | null = null;
 export const waveAnim = new Animated.Value(0);
 
-// تشغيل ملف التنفس (breath) – في حالة عدم وجوده، يتم تجاهله
 const playBreath = async () => {
   try {
     const breath = require('../assets/breath.mp3');
@@ -22,9 +18,6 @@ const playBreath = async () => {
   }
 };
 
-/**
- * بدء تسجيل الصوت مع تأثير موجي.
- */
 export const startRecordingVoice = async (): Promise<boolean> => {
   try {
     const { granted } = await Audio.requestPermissionsAsync();
@@ -42,16 +35,8 @@ export const startRecordingVoice = async (): Promise<boolean> => {
 
     Animated.loop(
       Animated.sequence([
-        Animated.timing(waveAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(waveAnim, {
-          toValue: 0.3,
-          duration: 300,
-          useNativeDriver: true,
-        }),
+        Animated.timing(waveAnim, { toValue: 1, duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.3, duration: 300, useNativeDriver: true }),
       ])
     ).start();
 
@@ -62,9 +47,6 @@ export const startRecordingVoice = async (): Promise<boolean> => {
   }
 };
 
-/**
- * إيقاف التسجيل وتحويل الصوت إلى نص.
- */
 export const stopRecordingVoice = async (): Promise<string | null> => {
   if (!recording) return null;
 
@@ -75,7 +57,6 @@ export const stopRecordingVoice = async (): Promise<string | null> => {
 
     const uri = recording.getURI();
     recording = null;
-
     if (!uri) return null;
 
     const formData = new FormData();
@@ -97,20 +78,20 @@ export const stopRecordingVoice = async (): Promise<string | null> => {
   }
 };
 
-/**
- * نطق الرد بصوت عاطفي (يضبط pitch و rate حسب المشاعر).
- */
 export const speakResponse = (
   text: string,
   tts: { pitch: number; rate: number }
 ) => {
+  // جلب اللغة من الـ store مباشرة
+  const lang = useTwinStore.getState().lang;
+
   Speech.stop();
 
   setTimeout(async () => {
     await playBreath();
     setTimeout(() => {
       Speech.speak(text, {
-        language: tts.rate < 0.8 ? 'ar' : 'en',
+        language: lang === 'ar' ? 'ar-SA' : 'en-US',
         pitch: tts.pitch,
         rate: tts.rate,
       });
@@ -118,9 +99,6 @@ export const speakResponse = (
   }, 400);
 };
 
-/**
- * إيقاف النطق فوراً.
- */
 export const stopSpeaking = () => {
   Speech.stop();
 };

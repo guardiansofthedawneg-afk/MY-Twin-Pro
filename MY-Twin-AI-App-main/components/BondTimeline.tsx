@@ -16,7 +16,7 @@ export default function BondTimeline() {
   const progress = Math.min(bondLevel, 100);
 
   // اختر اللغة المناسبة (يمكن ربطها لاحقًا بإعدادات المستخدم)
-  const lang: 'ar' | 'en' = 'ar';
+  const lang = useTwinStore((s) => s.lang);
 
   return (
     <View style={styles.container}>

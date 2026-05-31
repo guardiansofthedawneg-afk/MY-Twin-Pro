@@ -4,7 +4,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 export interface Message { role: 'user' | 'twin'; content: string; }
-export interface RelationshipDims { trust: number; empathy: number; humor: number; support: number; }
+export interface RelationshipDims { 
+  trust: number; 
+  empathy: number; 
+  humor: number; 
+  support: number;
+  affection: number;
+  dependency: number;
+}
 export type Tier = 'free' | 'free_trial_14d' | 'premium_trial' | 'premium' | 'pro' | 'yearly' | 'plus';
 export type Theme = 'dark' | 'light';
 export type Lang = 'ar' | 'en';
@@ -14,13 +21,16 @@ interface TwinStore {
   userId: string; setAuth: (userId: string) => void;
   twinName: string; setTwinName: (name: string) => void;
   twinGender: TwinGender; setTwinGender: (gender: TwinGender) => void;
-  bondLevel: number; relationshipDims: RelationshipDims; updateBond: (newBond: number) => void; updateRelationshipDims: (dims: Partial<RelationshipDims>) => void;
+  bondLevel: number; relationshipDims: RelationshipDims;
+  updateBond: (newBond: number) => void;
+  updateRelationshipDims: (dims: Partial<RelationshipDims>) => void;
   chatHistory: Message[]; addMessage: (role: 'user' | 'twin', content: string) => void; clearHistory: () => void;
   calmMode: boolean; toggleCalmMode: () => void;
   theme: Theme; toggleTheme: () => void;
   lang: Lang; setLang: (lang: Lang) => void; toggleLang: () => void;
   tier: Tier; updateTier: (tier: Tier) => void;
-  points: number; addPoints: (pts: number) => void; badges: string[]; addBadge: (badge: string) => void;
+  points: number; addPoints: (pts: number) => void;
+  badges: string[]; addBadge: (badge: string) => void;
   triggerHaptic: () => void;
 }
 
@@ -28,7 +38,8 @@ export const useTwinStore = create<TwinStore>()(persist((set, get) => ({
   userId: '', setAuth: (userId) => set({ userId }),
   twinName: 'توأمك', setTwinName: (name) => set({ twinName: name }),
   twinGender: 'female', setTwinGender: (gender) => set({ twinGender: gender }),
-  bondLevel: 0, relationshipDims: { trust: 0, empathy: 0, humor: 0, support: 0 },
+  bondLevel: 0,
+  relationshipDims: { trust: 0, empathy: 0, humor: 0, support: 0, affection: 0, dependency: 0 },
   updateBond: (newBond) => set((state) => {
     const badges = [...state.badges];
     if (newBond >= 40 && !badges.includes('friend')) badges.push('friend');
@@ -38,7 +49,9 @@ export const useTwinStore = create<TwinStore>()(persist((set, get) => ({
     return { bondLevel: newBond, badges };
   }),
   updateRelationshipDims: (dims) => set((state) => ({ relationshipDims: { ...state.relationshipDims, ...dims } })),
-  chatHistory: [], addMessage: (role, content) => set((state) => ({ chatHistory: [...state.chatHistory, { role, content }].slice(-50) })), clearHistory: () => set({ chatHistory: [] }),
+  chatHistory: [],
+  addMessage: (role, content) => set((state) => ({ chatHistory: [...state.chatHistory, { role, content }].slice(-50) })),
+  clearHistory: () => set({ chatHistory: [] }),
   calmMode: false, toggleCalmMode: () => set((state) => ({ calmMode: !state.calmMode })),
   theme: 'dark', toggleTheme: () => set((state) => ({ theme: state.theme === 'dark' ? 'light' : 'dark' })),
   lang: 'ar', setLang: (lang) => set({ lang }), toggleLang: () => set((state) => ({ lang: state.lang === 'ar' ? 'en' : 'ar' })),

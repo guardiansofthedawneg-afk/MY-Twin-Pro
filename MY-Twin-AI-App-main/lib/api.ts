@@ -5,23 +5,17 @@ import { RelationshipDims } from '../store/useTwinStore';
 
 const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 
   (Platform.OS === 'android' 
-      ? 'http://10.0.2.2:8000' 
-      : 'http://localhost:8000');
+    ? 'http://10.0.2.2:8000' 
+    : 'http://localhost:8000');
 
 export const API = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
-  headers: {
-    'Content-Type': 'application/json',
-  },
+  headers: { 'Content-Type': 'application/json' },
 });
 
-// Token Management
 let _token = '';
-
-export function setToken(token: string) {
-  _token = token;
-}
+export function setToken(token: string) { _token = token; }
 
 API.interceptors.request.use(async (config) => {
   if (_token) {
@@ -32,9 +26,7 @@ API.interceptors.request.use(async (config) => {
       if (token) {
         const parsed = JSON.parse(token);
         const accessToken = parsed?.access_token || parsed?.currentSession?.access_token;
-        if (accessToken) {
-          config.headers.Authorization = `Bearer ${accessToken}`;
-        }
+        if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
       }
     } catch (e) {
       console.warn('Failed to get token from SecureStore');
@@ -43,20 +35,14 @@ API.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response Interceptor للـ Error Handling
 API.interceptors.response.use(
   (response) => response,
   (error: AxiosError) => {
-    console.error('API Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      url: error.config?.url,
-    });
+    console.error('API Error:', { status: error.response?.status, url: error.config?.url });
     return Promise.reject(error);
   }
 );
 
-// ====================== Main Chat Function ======================
 export const askTwin = async (
   message: string,
   twinName: string,
@@ -65,47 +51,45 @@ export const askTwin = async (
   calm: boolean = false
 ) => {
   try {
-    const { data } = await API.post(
-      '/api/chat',
-      {
-        message,
-        twin_name: twinName,
-        bond_level: bond,
-        relationship_dims: dims,
+    const { data } = await API.post('/api/chat', {
+      message,
+      twin_name: twinName,
+      bond_level: bond,
+      relationship_dims: {
+        trust: dims.trust,
+        affection: dims.affection,
+        dependency: dims.dependency,
       },
-      {
-        headers: {
-          'X-Calm-Mode': String(calm),
-        },
+    }, {
+      headers: { 'X-Calm-Mode': String(calm) },
+    });
+
+    // مزامنة dims الراجعة من backend مع store
+    return {
+      ...data,
+      dims_update: {
+        trust: data.relationship_dims?.trust ?? dims.trust,
+        affection: data.relationship_dims?.affection ?? dims.affection,
+        dependency: data.relationship_dims?.dependency ?? dims.dependency,
+        empathy: dims.empathy,
+        humor: dims.humor,
+        support: dims.support,
       }
-    );
-    return data;
+    };
   } catch (error) {
     const err = error as AxiosError;
-    if (err.response?.status === 429) {
-      throw new Error("المحادثات كتير دلوقتي، استنى شوية ونكمل 🥺");
-    }
-    if (err.response?.status === 401) {
-      throw new Error("انتهت صلاحية الجلسة، سجل دخول تاني");
-    }
+    if (err.response?.status === 429) throw new Error("المحادثات كتير دلوقتي، استنى شوية ونكمل 🥺");
+    if (err.response?.status === 401) throw new Error("انتهت صلاحية الجلسة، سجل دخول تاني");
     throw new Error("حصل خطأ في الاتصال... جرب تاني");
   }
 };
 
-// ====================== Other Functions ======================
-
 export const startTrial = async (email: string, phone: string, deviceId: string) => {
-  const { data } = await API.post('/api/trial/start', {
-    email,
-    phone,
-    device_id: deviceId,
-  });
+  const { data } = await API.post('/api/trial/start', { email, phone, device_id: deviceId });
   return data;
 };
 
-export const transcribeAudio = async (): Promise<null> => {
-  return null;
-};
+export const transcribeAudio = async (): Promise<null> => null;
 
 type MemoryPayload = {
   id?: string;
@@ -117,8 +101,6 @@ type MemoryPayload = {
   emotion_tag?: string;
 };
 
-export const saveMemory = async (memory: MemoryPayload) => {
-  return API.post('/api/memory/save', memory);
-};
+export const saveMemory = async (memory: MemoryPayload) => API.post('/api/memory/save', memory);
 
 export default API;

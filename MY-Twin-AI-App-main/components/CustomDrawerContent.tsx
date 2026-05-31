@@ -32,8 +32,8 @@ const MENU_ITEMS = {
 };
 
 export default function CustomDrawerContent({ onClose }: { onClose: () => void }) {
-  const { tier, twinName, bondLevel } = useTwinStore();
-  const lang = 'ar';
+  const { tier, twinName, bondLevel, lang } = useTwinStore();
+  
   const items = MENU_ITEMS[lang];
   const stage = bondLevel >= 95 ? 'توأم روح' : bondLevel >= 80 ? 'ارتباط' : bondLevel >= 60 ? 'ثقة' : bondLevel >= 40 ? 'مقربين' : bondLevel >= 20 ? 'أصدقاء' : 'غرباء';
 

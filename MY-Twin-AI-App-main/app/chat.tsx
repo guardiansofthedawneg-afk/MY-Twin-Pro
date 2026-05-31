@@ -1,4 +1,4 @@
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView, Modal, Animated, Alert } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView, Modal, Animated, Alert, Image as RNImage } from "react-native";
 import { useState, useRef, useEffect } from 'react';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,7 +7,7 @@ import { askTwin } from '../lib/api';
 import { COLORS, FONTS } from '../utils/theme';
 import { startRecordingVoice, stopRecordingVoice, speakResponse } from '../utils/voice_engine';
 import { useToast } from '../components/Toast';
-import { Mic, ArrowUp, Paperclip, Image, FileText, Sun, MoonStar, Smile, Target, Brain, PenTool, X, ChevronRight } from 'lucide-react-native';
+import { Mic, ArrowUp, Paperclip, Image as ImageIcon, FileText, Sun, MoonStar, Smile, Target, Brain, PenTool, X, ChevronRight } from 'lucide-react-native';
 
 type ChatMessage = {
   role: 'user' | 'twin';
@@ -72,7 +72,7 @@ export default function Chat() {
     triggerHaptic(); addMessage('user', message); setInput(''); setLoading(true);
     try {
       const res = await askTwin(message, twinName, bondLevel, relationshipDims, calmMode);
-      addMessage('twin', res.reply); updateBond(res.new_bond ?? bondLevel); setEmotion(res?.emotion?.primary ?? 'neutral');
+      addMessage('twin', res.reply); updateBond(res.new_bond ?? bondLevel); if (res.dims_update) updateRelationshipDims(res.dims_update); setEmotion(res?.emotion?.primary ?? 'neutral');
       if (res?.importance > 0.7) { showToast(lang === 'ar' ? 'تم حفظ ذكرى جديدة ✨' : 'New memory saved ✨', 'success'); }
           if (res.tokens_left && res.tokens_left < 50) {
             Alert.alert(lang === "ar" ? "تنبيه" : "Notice", lang === "ar" ? "طاقتي على وشك النفاد! 💜" : "Energy almost depleted! 💜");
