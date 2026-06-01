@@ -168,10 +168,11 @@ async def chat(request: Request, body: ChatReq, uid=Depends(get_user), calm: str
     except Exception as exc:
         logger.debug(f"Personality lookup failed: {exc}")
     try:
-        res = await run_async(lambda: brain.respond(
+        res = await brain.respond_with_knowledge(
             message=body.message, twin_name=body.twin_name, bond_level=body.bond_level,
-            dims=body.dims, memories=mems, history=body.history[-10:], calm=is_calm, personality=personality_data
-        ))
+            dims=body.dims, memories=mems, history=body.history[-10:],
+            uid=uid, calm=is_calm, personality=personality_data
+        )
     except Exception as e:
         logger.error(f"brain: {e}")
         raise HTTPException(500, "ai_error")
