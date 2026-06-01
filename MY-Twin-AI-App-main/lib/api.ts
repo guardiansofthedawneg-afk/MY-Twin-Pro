@@ -45,6 +45,7 @@ async function getStoredToken(): Promise<string> {
 API.interceptors.request.use(async (config) => {
   const token = await getStoredToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
+    config.headers['auth'] = token;
   return config;
 });
 
