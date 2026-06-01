@@ -53,7 +53,7 @@ const TEXTS = {
 };
 
 export default function Settings() {
-  const { tier, calmMode, toggleCalmMode, lang, toggleLang } = useTwinStore();
+  const { tier, calmMode, toggleCalmMode, lang, toggleLang, theme, toggleTheme } = useTwinStore();
   const t = TEXTS[lang];
 
   const logout = async () => {

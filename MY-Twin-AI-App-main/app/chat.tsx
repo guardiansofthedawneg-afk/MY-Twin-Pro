@@ -1,5 +1,6 @@
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, SafeAreaView, Modal, Animated, Alert, StatusBar } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import { useTwinStore } from '../store/useTwinStore';
@@ -9,61 +10,53 @@ import { useToast } from '../components/Toast';
 import CircleProgress from '../components/CircleProgress';
 import CustomDrawerContent from '../components/CustomDrawerContent';
 import LimitReachedModal from '../components/LimitReachedModal';
-import { Mic, ArrowUp, Paperclip, Image as ImageIcon, FileText, Sun, MoonStar, Smile, Target, Brain, PenTool, X, Menu } from 'lucide-react-native';
+import { Mic, ArrowUp, Paperclip, Image as ImageIcon, FileText, Crown, Smile, Target, Brain, PenTool, X, Menu } from 'lucide-react-native';
 
 type ChatMessage = { role: 'user' | 'twin'; content: string; };
 
 // أيقونة التوأم حسب الجنس
-function TwinAvatar({ gender, name, size = 40 }: { gender: string; name: string; size?: number }) {
+function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
+  const bg = isFemale ? '#E9D5FF' : '#DDD6FE';
+  const emoji = isFemale ? '🌸' : '⚡';
   return (
-    <View style={[avatarStyles.container, {
-      width: size, height: size, borderRadius: size / 2,
-      backgroundColor: isFemale ? '#C084FC' : '#6B21A8',
-    }]}>
-      <Text style={[avatarStyles.emoji, { fontSize: size * 0.45 }]}>
-        {isFemale ? '🌸' : '⚡'}
-      </Text>
+    <View style={[avs.wrap, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
+      <Text style={{ fontSize: size * 0.48 }}>{emoji}</Text>
     </View>
   );
 }
-
-const avatarStyles = StyleSheet.create({
-  container: { justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  emoji: {},
+const avs = StyleSheet.create({
+  wrap: { justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 },
 });
 
-// زرار متغير باللمس
-function AnimatedButton({ onPress, children, style }: any) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const handlePress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, speed: 50 }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30 }),
-    ]).start();
-    onPress?.();
-  };
+// زرار متحرك
+function AnimBtn({ onPress, style, children }: any) {
+  const sc = useRef(new Animated.Value(1)).current;
   return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={1}>
-      <Animated.View style={[style, { transform: [{ scale }] }]}>
-        {children}
-      </Animated.View>
+    <TouchableOpacity onPress={() => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      Animated.sequence([
+        Animated.spring(sc, { toValue: 0.88, useNativeDriver: true, speed: 50 }),
+        Animated.spring(sc, { toValue: 1, useNativeDriver: true, speed: 30 }),
+      ]).start();
+      onPress?.();
+    }} activeOpacity={1}>
+      <Animated.View style={[style, { transform: [{ scale: sc }] }]}>{children}</Animated.View>
     </TouchableOpacity>
   );
 }
 
-function getWelcomeMessage(lang: 'ar' | 'en') {
-  const hour = new Date().getHours();
+function getWelcome(lang: 'ar' | 'en') {
+  const h = new Date().getHours();
   if (lang === 'ar') {
-    if (hour >= 6 && hour < 12) return { emoji: '🌅', text: 'صباح الخير! كيف حالك اليوم؟' };
-    if (hour >= 12 && hour < 18) return { emoji: '🌞', text: 'مرحباً! كيف يومك؟' };
-    if (hour >= 18 && hour < 24) return { emoji: '🌙', text: 'مساء الخير! كيف كان يومك؟' };
+    if (h >= 6 && h < 12) return { emoji: '🌅', text: 'صباح الخير! كيف حالك اليوم؟' };
+    if (h >= 12 && h < 18) return { emoji: '🌞', text: 'مرحباً! كيف يومك؟' };
+    if (h >= 18 && h < 24) return { emoji: '🌙', text: 'مساء الخير! كيف كان يومك؟' };
     return { emoji: '🌃', text: 'سهرة سعيدة! لنكن معاً؟' };
   }
-  if (hour >= 6 && hour < 12) return { emoji: '🌅', text: 'Good morning! How are you today?' };
-  if (hour >= 12 && hour < 18) return { emoji: '🌞', text: 'Hello! How is your day?' };
-  if (hour >= 18 && hour < 24) return { emoji: '🌙', text: 'Good evening! How was your day?' };
+  if (h >= 6 && h < 12) return { emoji: '🌅', text: 'Good morning! How are you today?' };
+  if (h >= 12 && h < 18) return { emoji: '🌞', text: 'Hello! How is your day?' };
+  if (h >= 18 && h < 24) return { emoji: '🌙', text: 'Good evening! How was your day?' };
   return { emoji: '🌃', text: 'Happy late night! Shall we talk?' };
 }
 
@@ -75,43 +68,45 @@ function getSuggestions(lang: 'ar' | 'en') {
     { icon: PenTool, label: 'إبداع', prompt: 'لنكتب شيئاً معاً' },
   ];
   return [
-    { icon: Smile, label: 'Chat', prompt: "Let's talk about anything" },
-    { icon: Target, label: 'Task', prompt: 'I need help with a task' },
+    { icon: Smile, label: 'Chat', prompt: "Let's talk" },
+    { icon: Target, label: 'Task', prompt: 'I need help' },
     { icon: Brain, label: 'Feelings', prompt: 'Help me understand my feelings' },
-    { icon: PenTool, label: 'Creative', prompt: "Let's write something together" },
+    { icon: PenTool, label: 'Creative', prompt: "Let's create together" },
   ];
 }
 
 export default function Chat() {
-  const { twinName, twinGender, bondLevel, relationshipDims, chatHistory, addMessage, updateBond, updateRelationshipDims, calmMode, toggleCalmMode, triggerHaptic, lang } = useTwinStore();
+  const insets = useSafeAreaInsets();
+  const { twinName, twinGender, bondLevel, tier, relationshipDims, chatHistory, addMessage, updateBond, updateRelationshipDims, calmMode, triggerHaptic, lang } = useTwinStore();
   const { showToast } = useToast();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showAttach, setShowAttach] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
-  const [limitModal, setLimitModal] = useState<{visible: boolean; type: 'daily_limit' | 'bond_ceiling'; hours: number}>({visible: false, type: 'daily_limit', hours: 0});
+  const [limitModal, setLimitModal] = useState<{ visible: boolean; type: 'daily_limit' | 'bond_ceiling'; hours: number }>({ visible: false, type: 'daily_limit', hours: 0 });
   const [energy] = useState(85);
-  const flatListRef = useRef<FlatList<ChatMessage>>(null);
+  const flatRef = useRef<FlatList<ChatMessage>>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const recordWave = useRef(new Animated.Value(1)).current;
+  const waveAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const isRTL = lang === 'ar';
-  const welcome = getWelcomeMessage(lang);
+  const welcome = getWelcome(lang);
   const suggestions = getSuggestions(lang);
+  const isFree = tier === 'free';
 
   useEffect(() => {
-    flatListRef.current?.scrollToEnd({ animated: true });
+    flatRef.current?.scrollToEnd({ animated: true });
     Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
   }, [chatHistory]);
 
   useEffect(() => {
     if (isRecording) {
       Animated.loop(Animated.sequence([
-        Animated.timing(recordWave, { toValue: 1.3, duration: 300, useNativeDriver: true }),
-        Animated.timing(recordWave, { toValue: 0.8, duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 1.3, duration: 300, useNativeDriver: true }),
+        Animated.timing(waveAnim, { toValue: 0.8, duration: 300, useNativeDriver: true }),
       ])).start();
-    } else { recordWave.setValue(1); }
+    } else { waveAnim.setValue(1); }
   }, [isRecording]);
 
   const openMenu = () => {
@@ -120,11 +115,12 @@ export default function Chat() {
   };
 
   const closeMenu = () => {
-    Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true }).start(() => setMenuVisible(false));
+    Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true })
+      .start(() => setMenuVisible(false));
   };
 
-  const send = async (messageText?: string) => {
-    const message = (messageText || input).trim();
+  const send = async (msg?: string) => {
+    const message = (msg || input).trim();
     if (!message || loading) return;
     triggerHaptic();
     addMessage('user', message);
@@ -137,10 +133,12 @@ export default function Chat() {
       if (res.dims_update) updateRelationshipDims(res.dims_update);
       if (res?.importance > 0.7) showToast(lang === 'ar' ? 'تم حفظ ذكرى ✨' : 'Memory saved ✨', 'success');
       if (res.tts) speakResponse(res.reply, res.tts);
-    } catch {
-      const errData = (error as any)?.response?.data;
+    } catch (error: any) {
+      const errData = error?.response?.data;
       if (errData?.error === 'daily_limit_reached') {
         setLimitModal({ visible: true, type: 'daily_limit', hours: errData.hours_until_reset || 0 });
+      } else if (error?.response?.status === 401) {
+        addMessage('twin', lang === 'ar' ? 'انتهت جلستك، سجّل دخول مجدداً 🔒' : 'Session expired, please login again 🔒');
       } else {
         addMessage('twin', lang === 'ar' ? 'تعذر الاتصال بالخادم 😔' : 'Connection failed 😔');
       }
@@ -159,37 +157,31 @@ export default function Chat() {
     }
   };
 
-  const renderMessage = ({ item, index }: { item: ChatMessage; index: number }) => {
+  const renderMsg = ({ item, index }: { item: ChatMessage; index: number }) => {
     const isUser = item.role === 'user';
     const isLast = index === chatHistory.length - 1;
     return (
-      <Animated.View style={[
-        styles.messageRow,
-        isUser ? styles.userRow : styles.twinRow,
-        isLast && { opacity: fadeAnim }
-      ]}>
-        {!isUser && (
-          <TwinAvatar gender={twinGender} name={twinName} size={30} />
-        )}
-        <View style={[styles.bubble, isUser ? styles.userBubble : styles.twinBubble, !isUser && { marginLeft: 8 }]}>
-          <Text style={isUser ? styles.userText : styles.twinText}>{item.content}</Text>
+      <Animated.View style={[s.msgRow, isUser ? s.userRow : s.twinRow, isLast && { opacity: fadeAnim }]}>
+        {!isUser && <TwinAvatar gender={twinGender} size={28} />}
+        <View style={[s.bubble, isUser ? s.userBubble : s.twinBubble, !isUser && { marginLeft: 8 }]}>
+          <Text style={isUser ? s.userText : s.twinText}>{item.content}</Text>
         </View>
       </Animated.View>
     );
   };
 
   const ListEmpty = () => (
-    <View style={styles.welcomeContainer}>
-      <Text style={styles.welcomeEmoji}>{welcome.emoji}</Text>
-      <Text style={styles.welcomeText}>{welcome.text}</Text>
-      <View style={styles.suggestionsRow}>
+    <View style={s.welcomeWrap}>
+      <Text style={s.welcomeEmoji}>{welcome.emoji}</Text>
+      <Text style={s.welcomeText}>{welcome.text}</Text>
+      <View style={s.suggestRow}>
         {suggestions.map((item, i) => {
           const Icon = item.icon;
           return (
-            <AnimatedButton key={i} onPress={() => send(item.prompt)} style={styles.suggestionBtn}>
-              <Icon size={18} color="#6B21A8" />
-              <Text style={styles.suggestionText}>{item.label}</Text>
-            </AnimatedButton>
+            <AnimBtn key={i} onPress={() => send(item.prompt)} style={s.suggestBtn}>
+              <Icon size={16} color="#6B21A8" />
+              <Text style={s.suggestText}>{item.label}</Text>
+            </AnimBtn>
           );
         })}
       </View>
@@ -197,72 +189,77 @@ export default function Chat() {
   );
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <View style={[s.root, { paddingTop: insets.top }]}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
 
-        {/* Header مبسط */}
-        <View style={styles.header}>
-          {/* القائمة + التوأم */}
-          <View style={styles.headerLeft}>
-            <AnimatedButton onPress={openMenu} style={styles.menuBtn}>
-              <Menu size={24} color="#1A1A1A" />
-            </AnimatedButton>
-            <TwinAvatar gender={twinGender} name={twinName} size={38} />
-            <View style={styles.twinInfo}>
-              <Text style={styles.headerName}>{twinName || (lang === 'ar' ? 'توأمك' : 'Your Twin')}</Text>
-              <View style={styles.onlineRow}>
-                <View style={styles.onlineDot} />
-                <Text style={styles.onlineText}>{lang === 'ar' ? 'متصل' : 'Online'}</Text>
+        {/* Header — صف واحد تحت حدود الأمان مباشرة */}
+        <View style={s.header}>
+          <View style={s.headerLeft}>
+            <AnimBtn onPress={openMenu} style={s.menuBtn}>
+              <Menu size={22} color="#1A1A1A" />
+            </AnimBtn>
+            <TwinAvatar gender={twinGender} size={36} />
+            <View>
+              <Text style={s.headerName}>{twinName || (lang === 'ar' ? 'توأمك' : 'Your Twin')}</Text>
+              <View style={s.onlineRow}>
+                <View style={s.onlineDot} />
+                <Text style={s.onlineText}>{lang === 'ar' ? 'متصل' : 'Online'}</Text>
               </View>
             </View>
           </View>
 
-          {/* الدوائر + هدوء */}
-          <View style={styles.headerRight}>
-            <CircleProgress percentage={bondLevel} color="#6B21A8" size={46} label={lang === 'ar' ? 'ترابط' : 'Level'} icon="💜" />
-            <CircleProgress percentage={energy} color="#10B981" size={46} label={lang === 'ar' ? 'طاقة' : 'Energy'} icon="⚡" />
-            <AnimatedButton onPress={toggleCalmMode} style={styles.calmBtn}>
-              {calmMode ? <MoonStar size={20} color="#6B21A8" /> : <Sun size={20} color="#F59E0B" />}
-            </AnimatedButton>
+          <View style={s.headerRight}>
+            <CircleProgress percentage={bondLevel} color="#6B21A8" size={44} label={lang === 'ar' ? 'ترابط' : 'Level'} icon="💜" />
+            <CircleProgress percentage={energy} color="#10B981" size={44} label={lang === 'ar' ? 'طاقة' : 'Energy'} icon="⚡" />
+            {/* زرار الترقية بدل الـ Calm Mode */}
+            {isFree ? (
+              <AnimBtn onPress={() => { /* router.push('/subscription') */ }} style={s.crownBtn}>
+                <Crown size={20} color="#F59E0B" />
+              </AnimBtn>
+            ) : (
+              <AnimBtn onPress={() => { /* router.push('/subscription') */ }} style={s.crownBtn}>
+                <Crown size={20} color="#6B21A8" />
+              </AnimBtn>
+            )}
           </View>
         </View>
 
         {/* المحادثة */}
         <FlatList
-          ref={flatListRef}
+          ref={flatRef}
           data={chatHistory}
           keyExtractor={(_, i) => i.toString()}
-          renderItem={renderMessage}
+          renderItem={renderMsg}
           ListEmptyComponent={ListEmpty}
-          contentContainerStyle={styles.listContent}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: false })}
+          contentContainerStyle={s.listContent}
+          onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
           removeClippedSubviews
           initialNumToRender={15}
         />
 
         {/* مؤشر الكتابة */}
         {loading && (
-          <View style={styles.typingRow}>
-            <TwinAvatar gender={twinGender} name={twinName} size={24} />
-            <View style={[styles.typingBubble, { marginLeft: 8 }]}>
-              <Text style={styles.typingDots}>• • •</Text>
+          <View style={s.typingRow}>
+            <TwinAvatar gender={twinGender} size={22} />
+            <View style={[s.typingBubble, { marginLeft: 8 }]}>
+              <Text style={s.typingDots}>• • •</Text>
             </View>
           </View>
         )}
 
         {/* شريط الإدخال */}
-        <View style={styles.inputBar}>
-          <AnimatedButton onPress={handleVoice} style={styles.iconBtn}>
-            <Animated.View style={{ transform: [{ scale: recordWave }] }}>
+        <View style={[s.inputBar, { paddingBottom: insets.bottom + 8 }]}>
+          <AnimBtn onPress={handleVoice} style={s.iconBtn}>
+            <Animated.View style={{ transform: [{ scale: waveAnim }] }}>
               <Mic size={22} color={isRecording ? '#EF4444' : '#999'} />
             </Animated.View>
-          </AnimatedButton>
-          <AnimatedButton onPress={() => setShowAttachMenu(true)} style={styles.iconBtn}>
+          </AnimBtn>
+          <AnimBtn onPress={() => setShowAttach(true)} style={s.iconBtn}>
             <Paperclip size={20} color="#999" />
-          </AnimatedButton>
+          </AnimBtn>
           <TextInput
-            style={[styles.textInput, isRTL && { textAlign: 'right' }]}
+            style={[s.textInput, isRTL && { textAlign: 'right' }]}
             value={input}
             onChangeText={setInput}
             placeholder={lang === 'ar' ? 'أنا هنا لأجلك... 💜' : "I'm here for you... 💜"}
@@ -271,72 +268,77 @@ export default function Chat() {
             maxLength={2000}
             onSubmitEditing={() => send()}
           />
-          {input.trim().length > 0 ? (
-            <AnimatedButton onPress={() => send()} style={styles.sendBtn}>
-              <ArrowUp size={18} color="#FFF" />
-            </AnimatedButton>
-          ) : <View style={{ width: 42 }} />}
+          {input.trim().length > 0
+            ? <AnimBtn onPress={() => send()} style={s.sendBtn}><ArrowUp size={18} color="#FFF" /></AnimBtn>
+            : <View style={{ width: 42 }} />
+          }
         </View>
 
         {/* القائمة الجانبية */}
         <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
-          <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={closeMenu}>
-            <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }] }]}>
+          <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={closeMenu}>
+            <Animated.View style={[s.sidebar, { transform: [{ translateX: slideAnim }] }]}>
               <CustomDrawerContent onClose={closeMenu} />
             </Animated.View>
           </TouchableOpacity>
         </Modal>
 
         {/* المرفقات */}
-        <Modal visible={showAttachMenu} transparent animationType="fade">
-          <TouchableOpacity style={styles.modalOverlay} onPress={() => setShowAttachMenu(false)}>
-            <View style={styles.attachMenu}>
-              <AnimatedButton style={styles.attachItem} onPress={async () => {
-                setShowAttachMenu(false);
+        <Modal visible={showAttach} transparent animationType="fade">
+          <TouchableOpacity style={s.modalOverlay} onPress={() => setShowAttach(false)}>
+            <View style={s.attachMenu}>
+              <AnimBtn style={s.attachItem} onPress={async () => {
+                setShowAttach(false);
                 const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images });
                 if (!r.canceled) addMessage('user', '[صورة]');
               }}>
                 <ImageIcon size={26} color="#6B21A8" />
-                <Text style={styles.attachLabel}>{lang === 'ar' ? 'صورة' : 'Image'}</Text>
-              </AnimatedButton>
-              <AnimatedButton style={styles.attachItem} onPress={() => { setShowAttachMenu(false); Alert.alert(lang === 'ar' ? 'قريباً' : 'Coming Soon', ''); }}>
+                <Text style={s.attachLabel}>{lang === 'ar' ? 'صورة' : 'Image'}</Text>
+              </AnimBtn>
+              <AnimBtn style={s.attachItem} onPress={() => { setShowAttach(false); Alert.alert(lang === 'ar' ? 'قريباً' : 'Soon', ''); }}>
                 <FileText size={26} color="#6B21A8" />
-                <Text style={styles.attachLabel}>{lang === 'ar' ? 'ملف' : 'File'}</Text>
-              </AnimatedButton>
-              <AnimatedButton style={styles.attachItem} onPress={() => setShowAttachMenu(false)}>
+                <Text style={s.attachLabel}>{lang === 'ar' ? 'ملف' : 'File'}</Text>
+              </AnimBtn>
+              <AnimBtn style={s.attachItem} onPress={() => setShowAttach(false)}>
                 <X size={26} color="#EF4444" />
-                <Text style={styles.attachLabel}>{lang === 'ar' ? 'إغلاق' : 'Close'}</Text>
-              </AnimatedButton>
+                <Text style={s.attachLabel}>{lang === 'ar' ? 'إغلاق' : 'Close'}</Text>
+              </AnimBtn>
             </View>
           </TouchableOpacity>
         </Modal>
 
-      <LimitReachedModal visible={limitModal.visible} type={limitModal.type} hoursUntilReset={limitModal.hours} onClose={() => setLimitModal(p => ({...p, visible: false}))} />
+        {/* Modal حد الرسائل */}
+        <LimitReachedModal
+          visible={limitModal.visible}
+          type={limitModal.type}
+          hoursUntilReset={limitModal.hours}
+          onClose={() => setLimitModal(p => ({ ...p, visible: false }))}
+        />
+
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#FAFAFA' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: '#FFFFFF' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  menuBtn: { padding: 6 },
-  twinInfo: { justifyContent: 'center' },
+  menuBtn: { padding: 4 },
   headerName: { fontSize: 15, fontWeight: '700', color: '#1A1A1A' },
   onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
   onlineText: { fontSize: 11, color: '#10B981', fontWeight: '500' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  calmBtn: { padding: 6 },
+  crownBtn: { padding: 6 },
   listContent: { paddingHorizontal: 14, paddingVertical: 12, flexGrow: 1 },
-  welcomeContainer: { alignItems: 'center', paddingTop: 40 },
+  welcomeWrap: { alignItems: 'center', paddingTop: 40 },
   welcomeEmoji: { fontSize: 44, marginBottom: 10 },
   welcomeText: { fontSize: 16, color: '#1A1A1A', fontWeight: '600', textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
-  suggestionsRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
-  suggestionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F0FF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#E0D9F5' },
-  suggestionText: { fontSize: 13, color: '#6B21A8', fontWeight: '600' },
-  messageRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
+  suggestRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  suggestBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F0FF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#E0D9F5' },
+  suggestText: { fontSize: 13, color: '#6B21A8', fontWeight: '600' },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
   userRow: { justifyContent: 'flex-end' },
   twinRow: { justifyContent: 'flex-start' },
   bubble: { maxWidth: '75%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
@@ -347,7 +349,7 @@ const styles = StyleSheet.create({
   typingRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingBottom: 8 },
   typingBubble: { backgroundColor: '#FFF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 16, borderWidth: 1, borderColor: '#EEE' },
   typingDots: { color: '#6B21A8', fontSize: 16, letterSpacing: 3 },
-  inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0F0F0', gap: 6 },
+  inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, backgroundColor: '#FFFFFF', borderTopWidth: 1, borderTopColor: '#F0F0F0', gap: 6 },
   iconBtn: { padding: 8 },
   textInput: { flex: 1, backgroundColor: '#F8F8F8', color: '#1A1A1A', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22, fontSize: 15, maxHeight: 100, minHeight: 44, borderWidth: 1, borderColor: '#EFEFEF' },
   sendBtn: { backgroundColor: '#6B21A8', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
