@@ -13,44 +13,58 @@ export const API = axios.create({
 });
 
 let _token = '';
-export function setToken(token: string) { _token = token; }
+
+export function setToken(token: string) {
+  _token = token;
+  // احفظ في SecureStore كاحتياطي
+  SecureStore.setItemAsync('mytwin_access_token', token).catch(() => {});
+}
+
 export function getToken() { return _token; }
 
-// جلب التوكن من Supabase SecureStore
-async function getStoredToken(): Promise<string> {
+async function resolveToken(): Promise<string> {
+  // أولاً: الـ memory
   if (_token) return _token;
+
+  // ثانياً: SecureStore مباشرة
   try {
-    // Supabase v2 بيحفظ الـ session بهذا الـ key
-    const keys = [
-      'supabase.auth.token',
-      `sb-${process.env.EXPO_PUBLIC_SUPABASE_URL?.split('//')[1]?.split('.')[0]}-auth-token`,
-    ];
-    for (const key of keys) {
-      const stored = await SecureStore.getItemAsync(key);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        const token = parsed?.access_token
-          || parsed?.currentSession?.access_token
-          || parsed?.[0]?.access_token
-          || '';
-        if (token) return token;
-      }
-    }
-  } catch (e) {
-    console.warn('Token fetch failed:', e);
+    const direct = await SecureStore.getItemAsync('mytwin_access_token');
+    if (direct) { _token = direct; return direct; }
+  } catch {}
+
+  // ثالثاً: Supabase session keys
+  const supabaseKeys = [
+    `sb-${(process.env.EXPO_PUBLIC_SUPABASE_URL || '').split('//')[1]?.split('.')[0]}-auth-token`,
+    'supabase.auth.token',
+  ];
+
+  for (const key of supabaseKeys) {
+    try {
+      const raw = await SecureStore.getItemAsync(key);
+      if (!raw) continue;
+      const parsed = JSON.parse(raw);
+      const token =
+        parsed?.access_token ||
+        parsed?.currentSession?.access_token ||
+        (Array.isArray(parsed) ? parsed[0]?.access_token : null);
+      if (token) { _token = token; return token; }
+    } catch {}
   }
+
   return '';
 }
 
 API.interceptors.request.use(async (config) => {
-  const token = await getStoredToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const token = await resolveToken();
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
     config.headers['auth'] = token;
+  }
   return config;
 });
 
 API.interceptors.response.use(
-  (response) => response,
+  (r) => r,
   (error: AxiosError) => {
     console.error('API Error:', {
       status: error.response?.status,
@@ -112,5 +126,7 @@ type MemoryPayload = {
   memory_type?: string; emotion_tag?: string;
 };
 
-export const saveMemory = async (memory: MemoryPayload) => API.post('/api/memory/save', memory);
+export const saveMemory = async (memory: MemoryPayload) =>
+  API.post('/api/memory/save', memory);
+
 export default API;
