@@ -45,11 +45,11 @@ const TEXTS = {
 };
 
 export default function Profile() {
-  const { userId, tier, twinName, bondLevel } = useTwinStore();
+  
   const [profile, setProfile] = useState<Record<string, string | number | undefined>>({});
   const [usage, setUsage] = useState({ messages: 0, tokens: 0 });
-  const lang = 'ar';
-  const t = TEXTS[lang];
+  const { userId, tier, twinName, bondLevel, lang } = useTwinStore();
+  const t = TEXTS[lang] || TEXTS['ar'];
   const stage = bondLevel >= 95 ? 'توأم روح' : bondLevel >= 80 ? 'ارتباط' : bondLevel >= 60 ? 'ثقة' : bondLevel >= 40 ? 'مقربين' : bondLevel >= 20 ? 'أصدقاء' : 'غرباء';
 
   useEffect(() => {
@@ -86,7 +86,7 @@ export default function Profile() {
         <View style={styles.avatar}><Text style={styles.avatarText}>{twinName?.charAt(0)?.toUpperCase() || '?'}</Text></View>
         <Text style={styles.twinName}>{twinName}</Text>
         <Text style={styles.stage}>{stage} • {bondLevel.toFixed(0)}%</Text>
-        <View style={styles.bondBar}><View style={[styles.bondFill, { width: `${bondLevel}%` }]} /></View>
+        <View style={styles.bondBar}><View style={[styles.bondFill, { width: `${Math.min(bondLevel, 100)}%` as any }]} /></View>
         <Text style={styles.bondTip}>{t.bondTip}</Text>
       </View>
 
