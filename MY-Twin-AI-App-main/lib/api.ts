@@ -13,33 +13,38 @@ export const API = axios.create({
 });
 
 let _token = '';
-export function setToken(token: string) { _token = token; }
+export function setToken(token: string) {
+  _token = token;
+  console.log('✅ Token saved, length:', token.length);
+}
 export function getToken() { return _token; }
 
-// جلب التوكن من Supabase مباشرة — الأضمن
 async function getFreshToken(): Promise<string> {
-  // أولاً: الـ memory
-  if (_token) return _token;
-
-  // ثانياً: Supabase session مباشرة
+  if (_token && _token.length > 100) {
+    console.log('✅ Using memory token, length:', _token.length);
+    return _token;
+  }
   try {
     const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
+    if (session?.access_token && session.access_token.length > 100) {
       _token = session.access_token;
+      console.log('✅ Got Supabase token, length:', _token.length);
       return _token;
     }
   } catch (e) {
-    console.warn('getSession failed:', e);
+    console.error('getSession error:', e);
   }
-
+  console.warn('❌ No valid token found');
   return '';
 }
 
 API.interceptors.request.use(async (config) => {
   const token = await getFreshToken();
   if (token) {
-    config.headers['Authorization'] = `Bearer ${token}`;
-    config.headers['auth'] = token;
+    const authValue = `Bearer ${token}`;
+    config.headers['auth'] = authValue;
+    config.headers['Authorization'] = authValue;
+    console.log('📤 Sending auth header, total length:', authValue.length);
   }
   return config;
 });
@@ -47,25 +52,24 @@ API.interceptors.request.use(async (config) => {
 API.interceptors.response.use(
   (r) => r,
   async (error: AxiosError) => {
-    // لو 401 — جرب تجدد التوكن
+    console.error('❌ API Error:', {
+      status: error.response?.status,
+      data: error.response?.data,
+      url: error.config?.url,
+    });
     if (error.response?.status === 401) {
       try {
         const { data: { session } } = await supabase.auth.refreshSession();
         if (session?.access_token) {
           _token = session.access_token;
-          // أعد المحاولة مرة واحدة
           const config = error.config!;
-          config.headers['Authorization'] = `Bearer ${_token}`;
-          config.headers['auth'] = _token;
+          const authValue = `Bearer ${_token}`;
+          config.headers['auth'] = authValue;
+          config.headers['Authorization'] = authValue;
           return API(config);
         }
       } catch {}
     }
-    console.error('API Error:', {
-      status: error.response?.status,
-      data: error.response?.data,
-      url: error.config?.url,
-    });
     return Promise.reject(error);
   }
 );
