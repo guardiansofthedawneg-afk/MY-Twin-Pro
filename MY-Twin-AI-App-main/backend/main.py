@@ -92,11 +92,24 @@ async def get_profile(uid):
     try:
         r = await run_async(lambda: db.table("profiles").select("*").eq("user_id", uid).single().execute())
         p = r.data or {}
+        if not p:
+            # إنشاء profile تلقائي
+            db.table("profiles").insert({
+                "id": uid, "tier": "free", "onboarded": False
+            }).execute()
+            p = {"tier": "free", "onboarded": False}
         cache_set(k, p, 600)
         return p
     except Exception as exc:
         logger.error(f"get_profile failed for {uid}: {exc}")
-        raise HTTPException(status_code=500, detail="profile_fetch_error")
+        # إنشاء profile طارئ
+        try:
+            db.table("profiles").insert({
+                "id": uid, "tier": "free", "onboarded": False
+            }).execute()
+            return {"tier": "free", "onboarded": False}
+        except:
+            raise HTTPException(status_code=500, detail="profile_fetch_error")
 
 async def get_usage(uid):
     t = date.today().isoformat()
