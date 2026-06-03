@@ -131,11 +131,11 @@ export default function Subscription() {
     initIAP();
 
     // الاستماع لنتائج الشراء
-    InAppPurchases.setPurchaseListener(({ responseCode, results, errorCode }) => {
-      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+  // TODO: إعادة كتابة بـ react-native-iap
+  // TODO: إعادة كتابة بـ react-native-iap
         for (const purchase of results) {
           if (!purchase.acknowledged) {
-            InAppPurchases.finishTransactionAsync(purchase, false);
+  // TODO: إعادة كتابة بـ react-native-iap
             const newTier = TIER_MAP[purchase.productId];
             if (newTier) {
               updateTier(newTier as Tier);
@@ -144,7 +144,7 @@ export default function Subscription() {
             }
           }
         }
-      } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
+  // TODO: إعادة كتابة بـ react-native-iap
         // المستخدم ألغى — لا شيء
       } else {
         Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'فشلت عملية الشراء' : 'Purchase failed');

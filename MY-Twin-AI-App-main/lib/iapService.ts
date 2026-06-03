@@ -1,71 +1,91 @@
-import { Platform } from 'react-native';
-import { initConnection, getProducts, requestPurchase, getAvailablePurchases, finishTransaction, purchaseUpdatedListener, purchaseErrorListener } from 'react-native-iap';
+import {
+  initConnection,
+  getProducts,
+  requestPurchase,
+  getAvailablePurchases,
+  finishTransaction,
+  purchaseUpdatedListener,
+  purchaseErrorListener,
+  Product,
+  Purchase
+} from 'react-native-iap';
 
-export const PRODUCT_SKUS = [
-  'plus_monthly',
-  'premium_monthly',
-  'pro_semiannual',
-  'yearly_annual',
-];
+const PRODUCT_SKUS = ['mytwin_plus', 'mytwin_premium', 'mytwin_pro'];
 
-export const TIER_MAP: Record<string, string> = {
-  'plus_monthly':    'plus',
-  'premium_monthly': 'premium',
-  'pro_semiannual':  'pro',
-  'yearly_annual':   'yearly',
-};
+let purchaseUpdateSubscription: any;
+let purchaseErrorSubscription: any;
 
-export const initIAP = async (): Promise<void> => {
-  if (Platform.OS !== 'android') return;
+export const connectIAP = async (): Promise<boolean> => {
   try {
-    await InAppPurchases.connectAsync();
-    console.log('✅ IAP Connected');
-  } catch (error) {
-    console.error('❌ IAP Connection Error:', error);
-  }
-};
-
-export const getProducts = async (): Promise<InAppPurchases.IAPItemDetails[]> => {
-  if (Platform.OS !== 'android') return [];
-  try {
-    const { responseCode, results } = await InAppPurchases.getProductsAsync(PRODUCT_SKUS);
-    if (responseCode === InAppPurchases.IAPResponseCode.OK) {
-      return results || [];
-    }
-    return [];
-  } catch (error) {
-    console.error('❌ Get Products Error:', error);
-    return [];
-  }
-};
-
-export const purchaseSubscription = async (productId: string): Promise<boolean> => {
-  if (Platform.OS !== 'android') return false;
-  try {
-    await InAppPurchases.purchaseItemAsync(productId);
+    const connected = await initConnection();
+    console.log('IAP Connected:', connected);
     return true;
-  } catch (error) {
-    console.error('❌ Purchase Error:', error);
+  } catch (err) {
+    console.warn('IAP Connection error:', err);
     return false;
   }
 };
 
-export const restorePurchases = async (): Promise<InAppPurchases.InAppPurchase[]> => {
-  if (Platform.OS !== 'android') return [];
+export const getIAPProducts = async (): Promise<Product[]> => {
   try {
-    const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
-    if (responseCode === InAppPurchases.IAPResponseCode.OK) {
-      return results || [];
-    }
-    return [];
-  } catch (error) {
-    console.error('❌ Restore Error:', error);
+    const products = await getProducts({skus: PRODUCT_SKUS});
+    console.log('IAP Products:', products);
+    return products;
+  } catch (err) {
+    console.warn('IAP Products error:', err);
     return [];
   }
 };
 
-export const disconnectIAP = async (): Promise<void> => {
+export const purchaseProduct = async (sku: string): Promise<Purchase | null> => {
   try {
-    await InAppPurchases.disconnectAsync();
-  } catch {}
+    const purchase = await requestPurchase({sku});
+    console.log('IAP Purchase:', purchase);
+    return purchase;
+  } catch (err: any) {
+    if (err.code === 'E_USER_CANCELLED') {
+      console.log('User cancelled purchase');
+    } else {
+      console.warn('IAP Purchase error:', err);
+    }
+    return null;
+  }
+};
+
+export const restorePurchases = async (): Promise<Purchase[]> => {
+  try {
+    const purchases = await getAvailablePurchases();
+    console.log('IAP Restored:', purchases);
+    return purchases;
+  } catch (err) {
+    console.warn('IAP Restore error:', err);
+    return [];
+  }
+};
+
+export const setupPurchaseListeners = (
+  onSuccess: (purchase: Purchase) => void,
+  onError: (error: any) => void
+) => {
+  purchaseUpdateSubscription = purchaseUpdatedListener((purchase: Purchase) => {
+    console.log('Purchase updated:', purchase);
+    finishTransaction({purchase, isConsumable: false});
+    onSuccess(purchase);
+  });
+
+  purchaseErrorSubscription = purchaseErrorListener((error: any) => {
+    console.warn('Purchase error:', error);
+    onError(error);
+  });
+};
+
+export const disconnectIAP = () => {
+  if (purchaseUpdateSubscription) {
+    purchaseUpdateSubscription.remove();
+    purchaseUpdateSubscription = null;
+  }
+  if (purchaseErrorSubscription) {
+    purchaseErrorSubscription.remove();
+    purchaseErrorSubscription = null;
+  }
 };
