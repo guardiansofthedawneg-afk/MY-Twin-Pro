@@ -1,91 +1,77 @@
+import { Platform } from 'react-native';
 import {
-  initConnection,
-  getProducts,
-  requestPurchase,
-  getAvailablePurchases,
+  Subscription,
+  SubscriptionPurchase,
+  requestSubscription,
+  getSubscriptions,
   finishTransaction,
-  purchaseUpdatedListener,
-  purchaseErrorListener,
-  Product,
-  Purchase
+  endConnection,
 } from 'react-native-iap';
 
-const PRODUCT_SKUS = ['mytwin_plus', 'mytwin_premium', 'mytwin_pro'];
+const productIds = ['plus_monthly', 'premium_monthly', 'pro_semiannual', 'yearly_annual'];
 
-let purchaseUpdateSubscription: any;
-let purchaseErrorSubscription: any;
+export const TIER_MAP: Record<string, string> = {
+  plus_monthly: 'plus',
+  premium_monthly: 'premium',
+  pro_semiannual: 'pro',
+  yearly_annual: 'yearly',
+};
 
-export const connectIAP = async (): Promise<boolean> => {
+let connected = false;
+
+export async function initIAP(): Promise<void> {
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    try {
+      await endConnection();
+      connected = true;
+    } catch (e) {
+      console.log('IAP init error', e);
+    }
+  }
+}
+
+export async function getProducts(): Promise<Subscription[]> {
+  if (!connected) await initIAP();
   try {
-    const connected = await initConnection();
-    console.log('IAP Connected:', connected);
-    return true;
-  } catch (err) {
-    console.warn('IAP Connection error:', err);
+    const subscriptions = await getSubscriptions({ skus: productIds });
+    return subscriptions;
+  } catch (e) {
+    console.log('getProducts error', e);
+    return [];
+  }
+}
+
+export async function purchaseSubscription(productId: string): Promise<boolean> {
+  try {
+    const result = await requestSubscription({ sku: productId });
+    if (result) {
+      const purchase: SubscriptionPurchase = Array.isArray(result) ? result[0] : result;
+      if (purchase) {
+        // finishTransaction يتوقع Purchase عامًا، لكن SubscriptionPurchase يمتد منه
+        await finishTransaction({ purchase: purchase as any, isConsumable: false });
+        return true;
+      }
+    }
+    return false;
+  } catch (e) {
+    console.log('purchase error', e);
     return false;
   }
-};
+}
 
-export const getIAPProducts = async (): Promise<Product[]> => {
+export async function restorePurchases(): Promise<Subscription[]> {
   try {
-    const products = await getProducts({skus: PRODUCT_SKUS});
-    console.log('IAP Products:', products);
-    return products;
-  } catch (err) {
-    console.warn('IAP Products error:', err);
+    const subscriptions = await getSubscriptions({ skus: productIds });
+    return subscriptions;
+  } catch (e) {
+    console.log('restore error', e);
     return [];
   }
-};
+}
 
-export const purchaseProduct = async (sku: string): Promise<Purchase | null> => {
+export function disconnectIAP(): void {
   try {
-    const purchase = await requestPurchase({sku});
-    console.log('IAP Purchase:', purchase);
-    return purchase;
-  } catch (err: any) {
-    if (err.code === 'E_USER_CANCELLED') {
-      console.log('User cancelled purchase');
-    } else {
-      console.warn('IAP Purchase error:', err);
-    }
-    return null;
-  }
-};
-
-export const restorePurchases = async (): Promise<Purchase[]> => {
-  try {
-    const purchases = await getAvailablePurchases();
-    console.log('IAP Restored:', purchases);
-    return purchases;
-  } catch (err) {
-    console.warn('IAP Restore error:', err);
-    return [];
-  }
-};
-
-export const setupPurchaseListeners = (
-  onSuccess: (purchase: Purchase) => void,
-  onError: (error: any) => void
-) => {
-  purchaseUpdateSubscription = purchaseUpdatedListener((purchase: Purchase) => {
-    console.log('Purchase updated:', purchase);
-    finishTransaction({purchase, isConsumable: false});
-    onSuccess(purchase);
-  });
-
-  purchaseErrorSubscription = purchaseErrorListener((error: any) => {
-    console.warn('Purchase error:', error);
-    onError(error);
-  });
-};
-
-export const disconnectIAP = () => {
-  if (purchaseUpdateSubscription) {
-    purchaseUpdateSubscription.remove();
-    purchaseUpdateSubscription = null;
-  }
-  if (purchaseErrorSubscription) {
-    purchaseErrorSubscription.remove();
-    purchaseErrorSubscription = null;
-  }
-};
+    endConnection();
+    connected = false;
+  } catch (e) {}
+}

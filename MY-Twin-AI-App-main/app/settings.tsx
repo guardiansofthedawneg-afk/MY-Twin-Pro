@@ -1,32 +1,26 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, Href } from 'expo-router';
 import { useTwinStore } from '../store/useTwinStore';
 import { supabase } from '../lib/supabase';
 import { API } from '../lib/api';
 import { Moon, Sun, Globe, Crown, Target, HeartPulse, History, Shield, Download, LogOut, Trash2 } from 'lucide-react-native';
 
+type AppRoute = Href & ('/subscription'|'/goals'|'/mood'|'/timeline'|'/privacy'|'/help');
+
 const TEXTS = {
   ar: {
-    title: 'الإعدادات', tier: 'الخطة الحالية', calm: 'وضع الهدوء',
-    lang: 'اللغة', theme: 'المظهر', upgrade: 'ترقية الخطة',
-    goals: 'أهدافي', emergency: 'دعم طوارئ نفسي', mood: 'لوحة المشاعر',
-    timeline: 'خط الذكريات', privacy: 'سياسة الخصوصية', export: 'تصدير بياناتي',
-    logout: 'تسجيل الخروج', delete: 'حذف الحساب',
-    deleteTitle: 'حذف نهائي',
-    deleteMsg: 'لا يمكن التراجع. سيتم حذف جميع ذكرياتك وبياناتك نهائياً.',
-    cancel: 'إلغاء', confirmDelete: 'حذف', exportTitle: 'تصدير البيانات',
-    company: 'Soul Sync Ltd.', companyDesc: 'MyTwin — شريكك الرقمي الذكي',
+    title:'الإعدادات', tier:'الخطة الحالية', calm:'وضع الهدوء', lang:'اللغة', theme:'المظهر', upgrade:'ترقية الخطة',
+    goals:'أهدافي', emergency:'دعم طوارئ نفسي', mood:'لوحة المشاعر', timeline:'خط الذكريات', privacy:'سياسة الخصوصية',
+    export:'تصدير بياناتي', logout:'تسجيل الخروج', delete:'حذف الحساب', deleteTitle:'حذف نهائي',
+    deleteMsg:'لا يمكن التراجع. سيتم حذف جميع ذكرياتك وبياناتك نهائياً.', cancel:'إلغاء', confirmDelete:'حذف', exportTitle:'تصدير البيانات',
+    company:'Soul Sync Ltd.', companyDesc:'MyTwin — شريكك الرقمي الذكي',
   },
   en: {
-    title: 'Settings', tier: 'Current Plan', calm: 'Calm Mode',
-    lang: 'Language', theme: 'Theme', upgrade: 'Upgrade Plan',
-    goals: 'My Goals', emergency: 'Emergency Support', mood: 'Mood Board',
-    timeline: 'Memory Timeline', privacy: 'Privacy Policy', export: 'Export My Data',
-    logout: 'Sign Out', delete: 'Delete Account',
-    deleteTitle: 'Delete Account',
-    deleteMsg: 'This is irreversible. All your memories and data will be permanently deleted.',
-    cancel: 'Cancel', confirmDelete: 'Delete', exportTitle: 'Export Data',
-    company: 'Soul Sync Ltd.', companyDesc: 'MyTwin — Your Intelligent Digital Companion',
+    title:'Settings', tier:'Current Plan', calm:'Calm Mode', lang:'Language', theme:'Theme', upgrade:'Upgrade Plan',
+    goals:'My Goals', emergency:'Emergency Support', mood:'Mood Board', timeline:'Memory Timeline', privacy:'Privacy Policy',
+    export:'Export My Data', logout:'Sign Out', delete:'Delete Account', deleteTitle:'Delete Account',
+    deleteMsg:'This is irreversible. All your memories and data will be permanently deleted.', cancel:'Cancel', confirmDelete:'Delete', exportTitle:'Export Data',
+    company:'Soul Sync Ltd.', companyDesc:'MyTwin — Your Intelligent Digital Companion',
   },
 };
 
@@ -34,151 +28,75 @@ export default function Settings() {
   const { tier, calmMode, toggleCalmMode, lang, toggleLang, theme, toggleTheme } = useTwinStore();
   const t = TEXTS[lang] || TEXTS['ar'];
 
-  const logout = async () => {
-    await supabase.auth.signOut();
-    router.replace('/login');
-  };
-
+  const logout = async () => { await supabase.auth.signOut(); router.replace('/login'); };
   const deleteAccount = () => {
     Alert.alert(t.deleteTitle, t.deleteMsg, [
-      { text: t.cancel, style: 'cancel' },
-      {
-        text: t.confirmDelete, style: 'destructive',
-        onPress: async () => {
-          await API.delete('/api/account');
-          await supabase.auth.signOut();
-          router.replace('/login');
-        },
-      },
+      { text:t.cancel, style:'cancel' },
+      { text:t.confirmDelete, style:'destructive', onPress: async () => { await API.delete('/api/account'); await supabase.auth.signOut(); router.replace('/login'); } },
     ]);
   };
-
   const handleExport = async () => {
     try {
       const { data } = await API.get('/api/me/export');
-      Alert.alert(t.exportTitle, JSON.stringify(data, null, 2).slice(0, 500) + '...');
-    } catch {
-      Alert.alert('خطأ', 'فشل تصدير البيانات');
-    }
+      Alert.alert(t.exportTitle, JSON.stringify(data,null,2).slice(0,500)+'...');
+    } catch { Alert.alert('خطأ', 'فشل تصدير البيانات'); }
   };
 
   return (
     <ScrollView style={s.container}>
       <View style={s.content}>
         <Text style={s.title}>{t.title}</Text>
-
-        {/* الباقة */}
-        <View style={s.tierBadge}>
-          <Crown size={14} color="#6B21A8" />
-          <Text style={s.tierText}> {t.tier}: {tier}</Text>
-        </View>
-
-        {/* المظهر */}
+        <View style={s.tierBadge}><Crown size={14} stroke="#6B21A8" /><Text style={s.tierText}> {t.tier}: {tier}</Text></View>
         <View style={s.row}>
-          <View style={s.rowLeft}>
-            {theme === 'dark'
-              ? <Moon size={18} color="#6B21A8" />
-              : <Sun size={18} color="#6B21A8" />}
-            <Text style={s.label}>{t.theme}</Text>
-          </View>
-          <Switch
-            value={theme === 'dark'}
-            onValueChange={toggleTheme}
-            trackColor={{ false: '#DDD', true: '#6B21A8' }}
-            thumbColor={theme === 'dark' ? '#FFF' : '#F4F4F4'}
-          />
+          <View style={s.rowLeft}>{theme==='dark'?<Moon size={18} stroke="#6B21A8" />:<Sun size={18} stroke="#6B21A8" />}<Text style={s.label}>{t.theme}</Text></View>
+          <Switch value={theme==='dark'} onValueChange={toggleTheme} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={theme==='dark'?'#FFF':'#F4F4F4'} />
         </View>
-
-        {/* وضع الهدوء */}
         <View style={s.row}>
-          <View style={s.rowLeft}>
-            <HeartPulse size={18} color="#6B21A8" />
-            <Text style={s.label}>{t.calm}</Text>
-          </View>
-          <Switch
-            value={calmMode}
-            onValueChange={toggleCalmMode}
-            trackColor={{ false: '#DDD', true: '#6B21A8' }}
-            thumbColor={calmMode ? '#FFF' : '#F4F4F4'}
-          />
+          <View style={s.rowLeft}><HeartPulse size={18} stroke="#6B21A8" /><Text style={s.label}>{t.calm}</Text></View>
+          <Switch value={calmMode} onValueChange={toggleCalmMode} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={calmMode?'#FFF':'#F4F4F4'} />
         </View>
-
-        {/* اللغة */}
         <View style={s.row}>
-          <View style={s.rowLeft}>
-            <Globe size={18} color="#6B21A8" />
-            <Text style={s.label}>{t.lang}</Text>
-          </View>
-          <TouchableOpacity onPress={toggleLang} style={s.langBtn}>
-            <Text style={s.langText}>{lang === 'ar' ? 'AR 🇸🇦' : 'EN 🇬🇧'}</Text>
-          </TouchableOpacity>
+          <View style={s.rowLeft}><Globe size={18} stroke="#6B21A8" /><Text style={s.label}>{t.lang}</Text></View>
+          <TouchableOpacity onPress={toggleLang} style={s.langBtn}><Text style={s.langText}>{lang==='ar'?'AR 🇸🇦':'EN 🇬🇧'}</Text></TouchableOpacity>
         </View>
-
-        {/* أزرار التنقل */}
         {[
-          { icon: Crown, label: t.upgrade, route: '/subscription', color: '#6B21A8' },
-          { icon: Target, label: t.goals, route: '/goals', color: '#6B21A8' },
-          { icon: HeartPulse, label: t.mood, route: '/mood', color: '#6B21A8' },
-          { icon: History, label: t.timeline, route: '/timeline', color: '#6B21A8' },
-          { icon: Shield, label: t.privacy, route: '/privacy', color: '#6B21A8' },
-        ].map(({ icon: Icon, label, route, color }) => (
-          <TouchableOpacity key={route} style={s.btn} onPress={() => router.push(route as any)}>
-            <Icon size={16} color="#FFF" />
-            <Text style={s.btnText}>{label}</Text>
+          { icon:Crown, label:t.upgrade, route:'/subscription' as AppRoute },
+          { icon:Target, label:t.goals, route:'/goals' as AppRoute },
+          { icon:HeartPulse, label:t.mood, route:'/mood' as AppRoute },
+          { icon:History, label:t.timeline, route:'/timeline' as AppRoute },
+          { icon:Shield, label:t.privacy, route:'/privacy' as AppRoute },
+        ].map(({ icon:Icon, label, route }) => (
+          <TouchableOpacity key={route} style={s.btn} onPress={()=>router.push(route)}>
+            <Icon size={16} stroke="#FFF" /><Text style={s.btnText}>{label}</Text>
           </TouchableOpacity>
         ))}
-
-        {/* تصدير البيانات */}
-        <TouchableOpacity style={s.btn} onPress={handleExport}>
-          <Download size={16} color="#FFF" />
-          <Text style={s.btnText}>{t.export}</Text>
+        <TouchableOpacity style={s.btn} onPress={handleExport}><Download size={16} stroke="#FFF" /><Text style={s.btnText}>{t.export}</Text></TouchableOpacity>
+        <TouchableOpacity style={[s.btn,{backgroundColor:'#FFF3F3', borderColor:'#FFCDD2', borderWidth:1}]} onPress={()=>router.push('/help' as AppRoute)}>
+          <HeartPulse size={16} stroke="#EF4444" /><Text style={[s.btnText,{color:'#EF4444'}]}>{t.emergency}</Text>
         </TouchableOpacity>
-
-        {/* دعم الطوارئ */}
-        <TouchableOpacity style={[s.btn, { backgroundColor: '#FFF3F3', borderColor: '#FFCDD2', borderWidth: 1 }]}
-          onPress={() => router.push('/help' as any)}>
-          <HeartPulse size={16} color="#EF4444" />
-          <Text style={[s.btnText, { color: '#EF4444' }]}>{t.emergency}</Text>
-        </TouchableOpacity>
-
-        {/* تسجيل الخروج */}
-        <TouchableOpacity style={[s.btn, s.outlineBtn]} onPress={logout}>
-          <LogOut size={16} color="#6B21A8" />
-          <Text style={[s.btnText, { color: '#6B21A8' }]}>{t.logout}</Text>
-        </TouchableOpacity>
-
-        {/* حذف الحساب */}
-        <TouchableOpacity style={[s.btn, s.dangerBtn]} onPress={deleteAccount}>
-          <Trash2 size={16} color="#EF4444" />
-          <Text style={[s.btnText, { color: '#EF4444' }]}>{t.delete}</Text>
-        </TouchableOpacity>
-
-        {/* Branding */}
-        <View style={s.branding}>
-          <Text style={s.brandingTitle}>{t.company}</Text>
-          <Text style={s.brandingSub}>{t.companyDesc}</Text>
-        </View>
+        <TouchableOpacity style={[s.btn, s.outlineBtn]} onPress={logout}><LogOut size={16} stroke="#6B21A8" /><Text style={[s.btnText,{color:'#6B21A8'}]}>{t.logout}</Text></TouchableOpacity>
+        <TouchableOpacity style={[s.btn, s.dangerBtn]} onPress={deleteAccount}><Trash2 size={16} stroke="#EF4444" /><Text style={[s.btnText,{color:'#EF4444'}]}>{t.delete}</Text></TouchableOpacity>
+        <View style={s.branding}><Text style={s.brandingTitle}>{t.company}</Text><Text style={s.brandingSub}>{t.companyDesc}</Text></View>
       </View>
     </ScrollView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F6F2' },
-  content: { padding: 20, gap: 10 },
-  title: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', marginBottom: 8 },
-  tierBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F0FF', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 4, borderWidth: 1, borderColor: '#E0D9F5' },
-  tierText: { color: '#6B21A8', fontWeight: '600', fontSize: 14 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#F0F0F0' },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  label: { color: '#1A1A1A', fontSize: 15, fontWeight: '500' },
-  langBtn: { backgroundColor: '#6B21A8', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20 },
-  langText: { color: '#FFF', fontWeight: '600', fontSize: 14 },
-  btn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#6B21A8', padding: 14, borderRadius: 12 },
-  btnText: { color: '#FFF', fontWeight: '600', fontSize: 15 },
-  outlineBtn: { backgroundColor: '#FFFFFF', borderWidth: 1.5, borderColor: '#6B21A8' },
-  dangerBtn: { backgroundColor: '#FFF5F5', borderWidth: 1.5, borderColor: '#FFCDD2' },
-  branding: { alignItems: 'center', paddingVertical: 20, marginTop: 8, borderTopWidth: 1, borderTopColor: '#E0D9F5' },
-  brandingTitle: { color: '#6B21A8', fontWeight: '700', fontSize: 15 },
-  brandingSub: { color: '#A09BB5', fontSize: 12, marginTop: 2 },
+  container:{ flex:1, backgroundColor:'#F8F6F2' }, content:{ padding:20, gap:10 },
+  title:{ fontSize:24, fontWeight:'800', color:'#1A1A1A', marginBottom:8 },
+  tierBadge:{ flexDirection:'row', alignItems:'center', backgroundColor:'#F3F0FF', paddingHorizontal:14, paddingVertical:8, borderRadius:10, alignSelf:'flex-start', marginBottom:4, borderWidth:1, borderColor:'#E0D9F5' },
+  tierText:{ color:'#6B21A8', fontWeight:'600', fontSize:14 },
+  row:{ flexDirection:'row', justifyContent:'space-between', alignItems:'center', backgroundColor:'#FFFFFF', padding:14, borderRadius:12, borderWidth:1, borderColor:'#F0F0F0' },
+  rowLeft:{ flexDirection:'row', alignItems:'center', gap:8 },
+  label:{ color:'#1A1A1A', fontSize:15, fontWeight:'500' },
+  langBtn:{ backgroundColor:'#6B21A8', paddingHorizontal:16, paddingVertical:8, borderRadius:20 },
+  langText:{ color:'#FFF', fontWeight:'600', fontSize:14 },
+  btn:{ flexDirection:'row', alignItems:'center', justifyContent:'center', gap:8, backgroundColor:'#6B21A8', padding:14, borderRadius:12 },
+  btnText:{ color:'#FFF', fontWeight:'600', fontSize:15 },
+  outlineBtn:{ backgroundColor:'#FFFFFF', borderWidth:1.5, borderColor:'#6B21A8' },
+  dangerBtn:{ backgroundColor:'#FFF5F5', borderWidth:1.5, borderColor:'#FFCDD2' },
+  branding:{ alignItems:'center', paddingVertical:20, marginTop:8, borderTopWidth:1, borderTopColor:'#E0D9F5' },
+  brandingTitle:{ color:'#6B21A8', fontWeight:'700', fontSize:15 },
+  brandingSub:{ color:'#A09BB5', fontSize:12, marginTop:2 },
 });
