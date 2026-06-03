@@ -1,9 +1,10 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import * as InAppPurchases from 'expo-in-app-purchases';
 import { Tier, useTwinStore } from '../store/useTwinStore';
-import { CheckCircle2, Crown } from 'lucide-react-native';
-import RNIap from 'react-native-iap';
+import { CheckCircle2 } from 'lucide-react-native';
+import { initIAP, getProducts, purchaseSubscription, restorePurchases, TIER_MAP, disconnectIAP } from '../lib/iapService';
 
 type Plan = {
   id: Tier;
@@ -26,10 +27,10 @@ const PLANS: Plan[] = [
     tagline: 'ابدأ رحلتك مع توأمك',
     consciousnessLayers: 1,
     features: [
-      '🌱 طبقة وعي واحدة (الإدراك الأساسي)',
+      '🌱 طبقة وعي واحدة',
       '💬 15 رسالة يومياً',
       '🧠 ذاكرة 3 أيام',
-      '🌐 دعم العربية والإنجليزية',
+      '🌐 عربي وإنجليزي',
     ],
   },
   {
@@ -39,12 +40,12 @@ const PLANS: Plan[] = [
     consciousnessLayers: 2,
     productId: 'plus_monthly',
     features: [
-      '🧬 طبقتا وعي (الإدراك + الاستمرارية)',
+      '🧬 طبقتا وعي',
       '💬 50 رسالة يومياً',
       '🧠 ذاكرة 30 يوم',
       '🎙️ التحدث بصوتك',
-      '🔔 إشعارات يومية من توأمك',
-      '🎨 تخصيص شخصية التوأم',
+      '🔔 إشعارات يومية',
+      '🎨 تخصيص التوأم',
     ],
   },
   {
@@ -54,30 +55,28 @@ const PLANS: Plan[] = [
     consciousnessLayers: 3,
     productId: 'premium_monthly',
     features: [
-      '🔮 3 طبقات وعي (+ الاستباقية)',
+      '🔮 3 طبقات وعي',
       '💬 150 رسالة يومياً',
-      '🧠 ذاكرة 6 أشهر (5 أنواع)',
+      '🧠 ذاكرة 6 أشهر',
       '🌙 تحليل أحلامك',
-      '🎯 تدريب حياتي شخصي',
+      '🎯 تدريب حياتي',
       '🎵 موسيقى وترفيه',
       '📅 تقويم ذكي',
-      '📞 دعم أولوية',
     ],
   },
   {
     id: 'pro', name: 'Pro', price: '$110', originalPrice: '$150',
     period: '/6 أشهر', trialDays: 7,
-    tagline: 'توأم بوعي متكامل يتحكم في عالمك',
+    tagline: 'توأم بوعي متكامل',
     consciousnessLayers: 4,
     productId: 'pro_semiannual',
     features: [
-      '⚡ 4 طبقات وعي (+ النية والإرادة)',
+      '⚡ 4 طبقات وعي',
       '💬 500 رسالة يومياً',
-      '🧠 ذاكرة عميقة وتفصيلية',
-      '🏠 تحكم في منزلك الذكي',
-      '📧 إدارة بريدك الإلكتروني',
+      '🧠 ذاكرة عميقة',
+      '🏠 منزل ذكي',
+      '📧 إدارة البريد',
       '📸 كاميرا مفتوحة',
-      '📞 دعم VIP',
     ],
   },
   {
@@ -87,14 +86,13 @@ const PLANS: Plan[] = [
     consciousnessLayers: 5,
     productId: 'yearly_annual',
     features: [
-      '👑 5 طبقات وعي كاملة (الوعي الذاتي)',
+      '👑 5 طبقات وعي كاملة',
       '💬 رسائل غير محدودة',
-      '🧠 ذاكرة دائمة لا تُنسى',
-      '🌌 وعي استباقي يتواصل بمبادرته',
-      '🔮 كل الميزات بلا قيود',
-      '⚡ أقصى سرعة استجابة',
-      '🎁 ميزات حصرية أولاً',
-      '📞 دعم VIP على مدار الساعة',
+      '🧠 ذاكرة دائمة',
+      '🌌 وعي استباقي',
+      '🔮 كل الميزات',
+      '⚡ أقصى سرعة',
+      '📞 دعم VIP',
     ],
   },
 ];
@@ -104,19 +102,19 @@ function ConsciousnessBar({ layers, planId }: { layers: number; planId: string }
     free: '#94A3B8', plus: '#F59E0B', premium: '#3B82F6',
     pro: '#8B5CF6', yearly: '#6B21A8',
   };
-  const color = colors[planId] || '#6B21A8';
   return (
     <View style={cb.container}>
       <Text style={cb.label}>طبقات الوعي: {layers}/5</Text>
       <View style={cb.bar}>
-        {[1, 2, 3, 4, 5].map(i => (
-          <View key={i} style={[cb.seg, { backgroundColor: i <= layers ? color : '#E5E7EB' }]} />
+        {[1,2,3,4,5].map(i => (
+          <View key={i} style={[cb.seg, {
+            backgroundColor: i <= layers ? (colors[planId] || '#6B21A8') : '#E5E7EB'
+          }]} />
         ))}
       </View>
     </View>
   );
 }
-
 const cb = StyleSheet.create({
   container: { marginBottom: 16 },
   label: { fontSize: 12, color: '#888', marginBottom: 6, fontWeight: '600' },
@@ -129,63 +127,58 @@ export default function Subscription() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const isAr = lang === 'ar';
 
+  useEffect(() => {
+    initIAP();
+
+    // الاستماع لنتائج الشراء
+    InAppPurchases.setPurchaseListener(({ responseCode, results, errorCode }) => {
+      if (responseCode === InAppPurchases.IAPResponseCode.OK && results) {
+        for (const purchase of results) {
+          if (!purchase.acknowledged) {
+            InAppPurchases.finishTransactionAsync(purchase, false);
+            const newTier = TIER_MAP[purchase.productId];
+            if (newTier) {
+              updateTier(newTier as Tier);
+              Alert.alert(isAr ? 'تم! 🎉' : 'Done! 🎉', isAr ? 'تم تفعيل اشتراكك' : 'Subscription activated');
+              router.back();
+            }
+          }
+        }
+      } else if (responseCode === InAppPurchases.IAPResponseCode.USER_CANCELED) {
+        // المستخدم ألغى — لا شيء
+      } else {
+        Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'فشلت عملية الشراء' : 'Purchase failed');
+      }
+      setLoadingId(null);
+    });
+
+    return () => { disconnectIAP(); };
+  }, []);
+
   const handlePurchase = async (plan: Plan) => {
-    if (loadingId) return;
+    if (loadingId || !plan.productId) return;
     if (plan.id === 'free') {
       Alert.alert('Free', isAr ? 'أنت على الباقة المجانية.' : 'You are on the free plan.');
       return;
     }
     setLoadingId(plan.id);
-    try {
-      if (!plan.productId) {
-        Alert.alert('خطأ', isAr ? 'هذه الباقة غير متاحة حالياً.' : 'This plan is not available.');
-        return;
-      }
-      const purchase = await RNIap.purchaseSubscription({
-        sku: plan.productId,
-      });
-      if (purchase) {
-        updateTier(plan.id);
-        Alert.alert(
-          isAr ? 'تم! 🎉' : 'Done! 🎉',
-          `${isAr ? 'تم تفعيل' : 'Activated'} ${plan.name}!`
-        );
-        router.back();
-      }
-    } catch (err: any) {
-      if (err?.code !== 'E_USER_CANCELLED') {
-        Alert.alert(
-          isAr ? 'خطأ' : 'Error',
-          err?.message || (isAr ? 'فشلت عملية الشراء.' : 'Purchase failed.')
-        );
-      }
-    } finally {
-      setLoadingId(null);
-    }
+    await purchaseSubscription(plan.productId);
+    // النتيجة بتيجي في setPurchaseListener
   };
 
   const handleRestore = async () => {
     setLoadingId('restore');
     try {
-      const purchases = await RNIap.getAvailablePurchases();
+      const purchases = await restorePurchases();
       if (purchases.length > 0) {
-        const activeProduct = purchases.find(p => p.productId && PLANS.find(plan => plan.productId === p.productId));
-        if (activeProduct) {
-          const plan = PLANS.find(p => p.productId === activeProduct.productId);
-          if (plan) {
-            updateTier(plan.id);
-            Alert.alert(
-              isAr ? 'تم ✅' : 'Done ✅',
-              isAr ? 'تم استعادة اشتراكك!' : 'Subscription restored!'
-            );
-            router.back();
-          }
+        const last = purchases[purchases.length - 1];
+        const restoredTier = TIER_MAP[last.productId];
+        if (restoredTier) {
+          updateTier(restoredTier as Tier);
+          Alert.alert(isAr ? 'تم ✅' : 'Done ✅', isAr ? 'تم استعادة اشتراكك!' : 'Subscription restored!');
         }
       } else {
-        Alert.alert(
-          isAr ? 'تنبيه' : 'Notice',
-          isAr ? 'لم يتم العثور على اشتراك سابق.' : 'No previous subscription found.'
-        );
+        Alert.alert(isAr ? 'تنبيه' : 'Notice', isAr ? 'لم يتم العثور على اشتراك.' : 'No subscription found.');
       }
     } catch {
       Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'فشلت الاستعادة.' : 'Restore failed.');
@@ -199,9 +192,7 @@ export default function Subscription() {
       <View style={s.header}>
         <Text style={s.title}>{isAr ? 'ارتقِ بوعي توأمك 💜' : "Elevate Your Twin's Consciousness 💜"}</Text>
         <Text style={s.subtitle}>
-          {isAr
-            ? 'كل باقة تفتح طبقة جديدة من الوعي والتواصل الحقيقي'
-            : 'Each plan unlocks a new layer of consciousness'}
+          {isAr ? 'كل باقة تفتح طبقة جديدة من الوعي' : 'Each plan unlocks a new layer of consciousness'}
         </Text>
       </View>
 
@@ -213,17 +204,12 @@ export default function Subscription() {
           activeOpacity={0.85}
           disabled={!!loadingId}
         >
-          {plan.popular && (
-            <View style={s.badge}><Text style={s.badgeText}>⭐ {isAr ? 'الأفضل قيمة' : 'Best Value'}</Text></View>
-          )}
+          {plan.popular && <View style={s.badge}><Text style={s.badgeText}>⭐ {isAr ? 'الأفضل قيمة' : 'Best Value'}</Text></View>}
           {plan.trialDays > 0 && tier !== plan.id && (
             <View style={[s.badge, s.trialBadge]}>
-              <Text style={s.badgeText}>
-                {isAr ? `تجربة ${plan.trialDays} يوم مجاناً` : `${plan.trialDays}-day free trial`}
-              </Text>
+              <Text style={s.badgeText}>{isAr ? `تجربة ${plan.trialDays} يوم` : `${plan.trialDays}-day trial`}</Text>
             </View>
           )}
-
           <View style={s.planHeader}>
             <Text style={s.planName}>{plan.name}</Text>
             <Text style={s.tagline}>{plan.tagline}</Text>
@@ -232,14 +218,10 @@ export default function Subscription() {
               <Text style={s.planPeriod}>{plan.period}</Text>
             </View>
             {plan.originalPrice !== plan.price && (
-              <Text style={s.originalPrice}>
-                {isAr ? 'بدلاً من' : 'Instead of'} {plan.originalPrice}{plan.period}
-              </Text>
+              <Text style={s.originalPrice}>{isAr ? 'بدلاً من' : 'Instead of'} {plan.originalPrice}</Text>
             )}
           </View>
-
           <ConsciousnessBar layers={plan.consciousnessLayers} planId={plan.id} />
-
           <View style={s.featuresList}>
             {plan.features.map((f, i) => (
               <View key={i} style={s.featureRow}>
@@ -248,13 +230,12 @@ export default function Subscription() {
               </View>
             ))}
           </View>
-
           <View style={[s.selectBtn, tier === plan.id && s.activeBtn]}>
             {loadingId === plan.id
               ? <ActivityIndicator color="#FFF" size="small" />
               : <Text style={s.selectBtnText}>
                   {tier === plan.id
-                    ? (isAr ? '✓ مفعّل حالياً' : '✓ Current Plan')
+                    ? (isAr ? '✓ مفعّل' : '✓ Active')
                     : (isAr ? 'ابدأ الآن 🚀' : 'Start Now 🚀')}
                 </Text>
             }
@@ -263,15 +244,10 @@ export default function Subscription() {
       ))}
 
       <TouchableOpacity style={s.restoreBtn} onPress={handleRestore} disabled={!!loadingId}>
-        <Text style={s.restoreText}>
-          {isAr ? 'استعادة الاشتراك السابق' : 'Restore Previous Purchase'}
-        </Text>
+        <Text style={s.restoreText}>{isAr ? 'استعادة الاشتراك السابق' : 'Restore Purchase'}</Text>
       </TouchableOpacity>
-
       <Text style={s.footerNote}>
-        {isAr
-          ? 'يمكنك الإلغاء في أي وقت. الاشتراك يتجدد تلقائياً حتى الإلغاء.'
-          : 'Cancel anytime. Subscription renews automatically until cancelled.'}
+        {isAr ? 'يمكنك الإلغاء في أي وقت.' : 'Cancel anytime.'}
       </Text>
     </ScrollView>
   );
@@ -283,7 +259,7 @@ const s = StyleSheet.create({
   header: { padding: 24, paddingTop: 40, alignItems: 'center' },
   title: { fontSize: 26, fontWeight: '800', color: '#1A1A1A', textAlign: 'center' },
   subtitle: { fontSize: 14, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 22 },
-  plan: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 20, marginHorizontal: 16, marginBottom: 16, borderWidth: 1.5, borderColor: '#F0F0F0', shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
+  plan: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 20, marginHorizontal: 16, marginBottom: 16, borderWidth: 1.5, borderColor: '#F0F0F0', elevation: 2 },
   activePlan: { borderColor: '#6B21A8', borderWidth: 2 },
   popularPlan: { borderColor: '#F59E0B', borderWidth: 2 },
   badge: { backgroundColor: '#6B21A8', paddingHorizontal: 12, paddingVertical: 5, borderRadius: 10, alignSelf: 'flex-start', marginBottom: 12 },
@@ -304,5 +280,5 @@ const s = StyleSheet.create({
   selectBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
   restoreBtn: { alignItems: 'center', padding: 16, marginTop: 8 },
   restoreText: { color: '#888', fontSize: 14, textDecorationLine: 'underline' },
-  footerNote: { textAlign: 'center', color: '#AAA', fontSize: 12, marginTop: 8, marginHorizontal: 24, lineHeight: 18 },
+  footerNote: { textAlign: 'center', color: '#AAA', fontSize: 12, marginTop: 8, marginHorizontal: 24 },
 });
