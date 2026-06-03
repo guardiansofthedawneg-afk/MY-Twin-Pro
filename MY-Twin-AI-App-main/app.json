@@ -1,9 +1,9 @@
 {
   "expo": {
     "name": "MyTwin",
-    "slug": "my-twin-pro",
+    "slug": "mytwin-ai",
     "scheme": "mytwin",
-    "version": "1.0.0",
+    "version": "5.3.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -12,20 +12,17 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.soulsync.mytwin",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "يحتاج التطبيق للميكروفون للمحادثات الصوتية.",
-        "NSLocationWhenInUseUsageDescription": "يستخدم الموقع لتحسين تجربة التوأم.",
+        "NSMicrophoneUsageDescription": "يحتاج التطبيق للميكروفون للمحادثات الصوتية المباشرة.",
+        "NSLocationWhenInUseUsageDescription": "يستخدم موقعك لتكييف تجربة التوأم الرقمي بناءً على الطقس والوقت من اليوم.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-    "googleServicesFile": "./google-services.json",
       "package": "com.soulsync.mytwin",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
@@ -39,55 +36,33 @@
       ]
     },
     "plugins": [
-      "react-native-iap",
-    "react-native-iap",
-      [
-        "expo-build-properties",
-        {
-          "android": {
-    "googleServicesFile": "./google-services.json",
-            "useFrameworks": "static",
-            "enableProguardInReleaseBuilds": true
-          }
+      ["expo-build-properties", {
+        "android": {
+          "extraMavenRepos": [],
+          "useFrameworks": "static",
+          "enableProguardInReleaseBuilds": true
         }
-      ],
-      [
-        "onesignal-expo-plugin",
-        {
-          "mode": "production"
-        }
-      ],
+      }],
+      ["onesignal-expo-plugin", { "mode": "production" }],
       "expo-router",
-      [
-        "expo-av",
-        {
-          "microphonePermission": "السماح باستخدام الميكروفون"
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#ffffff"
-        }
-      ],
+      ["expo-av", {
+        "microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية."
+      }],
+      ["expo-notifications", {
+        "icon": "./assets/notification-icon.png",
+        "color": "#5B4AE0"
+      }],
       "expo-font",
       "expo-secure-store"
     ],
     "extra": {
-      "router": {
-        "origin": false
-      },
+      "router": { "origin": false },
       "eas": {
-        "projectId": "b5e2baa3-6015-40a5-9f31-115298d3b0c9"
+        "projectId": "0ed029b8-4ba3-4902-87ec-5c3505bfc4c6"
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"
-    },
-    "owner": "mohamed101"
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": { "url": "https://u.expo.dev/0ed029b8-4ba3-4902-87ec-5c3505bfc4c6" },
+    "owner": "soulsync.ai"
   }
 }
