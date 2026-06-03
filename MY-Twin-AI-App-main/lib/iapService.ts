@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import * as InAppPurchases from 'expo-in-app-purchases';
+import { initConnection, getProducts, requestPurchase, getAvailablePurchases, finishTransaction, purchaseUpdatedListener, purchaseErrorListener } from 'react-native-iap';
 
 export const PRODUCT_SKUS = [
   'plus_monthly',

@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useState, useEffect } from 'react';
-import * as InAppPurchases from 'expo-in-app-purchases';
+import { initConnection, getProducts, requestPurchase, getAvailablePurchases, finishTransaction, purchaseUpdatedListener, purchaseErrorListener } from 'react-native-iap';
 import { Tier, useTwinStore } from '../store/useTwinStore';
 import { CheckCircle2 } from 'lucide-react-native';
 import { initIAP, getProducts, purchaseSubscription, restorePurchases, TIER_MAP, disconnectIAP } from '../lib/iapService';

@@ -42,7 +42,6 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-  
       [
         "expo-av",
         { "microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية." }
