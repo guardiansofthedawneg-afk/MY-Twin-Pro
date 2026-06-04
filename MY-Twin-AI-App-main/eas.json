@@ -13,16 +13,14 @@
       "distribution": "internal",
       "channel": "preview",
       "android": {
-        "buildType": "apk",
-        "image": "expo-sdk-51"
+        "buildType": "apk"
       }
     },
     "production": {
       "channel": "production",
       "autoIncrement": true,
       "android": {
-        "buildType": "app-bundle",
-        "image": "expo-sdk-51"
+        "buildType": "app-bundle"
       }
     }
   },
