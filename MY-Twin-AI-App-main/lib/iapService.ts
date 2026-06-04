@@ -1,26 +1,28 @@
-import { initBilling, getSubscriptions, purchase, restorePurchases as restore } from '../google-play-billing/src';
+/**
+ * MyTwin - IAP Service
+ * Google Play Billing via Expo modules
+ */
+import { Platform, Alert } from 'react-native';
 
 export const TIER_MAP: Record<string, string> = {
-  plus_monthly: 'plus',
-  premium_monthly: 'premium',
-  pro_semiannual: 'pro',
-  yearly_annual: 'yearly',
+  'plus_monthly':    'plus',
+  'premium_monthly': 'premium',
+  'pro_semiannual':  'pro',
+  'yearly_annual':   'yearly',
 };
 
-export async function initIAP() {
-  await initBilling();
-}
+export const PRODUCT_SKUS = Object.keys(TIER_MAP);
 
-export async function getProducts() {
-  return getSubscriptions();
-}
+// Stub functions — يتم استبدالها بالمنطق الحقيقي لاحقاً
+export const initIAP = async (): Promise<void> => {};
 
-export async function purchaseSubscription(productId: string) {
-  return purchase(productId);
-}
+export const purchaseSubscription = async (productId: string): Promise<boolean> => {
+  Alert.alert('قريباً', 'الاشتراكات ستكون متاحة قريباً على Google Play');
+  return false;
+};
 
-export async function restorePurchases() {
-  return restore();
-}
+export const restorePurchases = async (): Promise<string[]> => {
+  return [];
+};
 
-export function disconnectIAP() {}
+export const disconnectIAP = async (): Promise<void> => {};
