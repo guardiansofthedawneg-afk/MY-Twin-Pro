@@ -69,7 +69,8 @@
             "deploymentTarget": "16.4"
           }
         }
-      ]
+      ],
+      "react-native-iap"
     ],
     "extra": {
       "router": {
