@@ -61,6 +61,12 @@
           "react-native-reanimated"
         ]
       }
+    },
+    "install": {
+      "exclude": [
+        "react-native-reanimated",
+        "@types/react"
+      ]
     }
   }
 }
