@@ -70,7 +70,6 @@
           }
         }
       ],
-      "react-native-iap",
       "./plugins/removeSupportLibPlugin"
     ],
     "extra": {
