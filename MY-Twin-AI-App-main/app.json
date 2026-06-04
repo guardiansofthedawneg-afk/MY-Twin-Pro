@@ -12,7 +12,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFFFFF"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.soulsync.mytwin",
@@ -43,7 +45,9 @@
       "expo-secure-store",
       [
         "expo-av",
-        { "microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية." }
+        {
+          "microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية."
+        }
       ],
       [
         "expo-notifications",
@@ -62,18 +66,22 @@
             "minSdkVersion": 24
           },
           "ios": {
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "16.4"
           }
         }
       ]
     ],
     "extra": {
-      "router": { "origin": false },
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "b5e2baa3-6015-40a5-9f31-115298d3b0c9"
       }
     },
-    "runtimeVersion": { "policy": "appVersion" },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"
     },
