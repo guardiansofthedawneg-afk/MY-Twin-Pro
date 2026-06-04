@@ -17,8 +17,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.soulsync.mytwin",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "يحتاج التطبيق للميكروفون للمحادثات الصوتية المباشرة.",
-        "NSLocationWhenInUseUsageDescription": "يستخدم موقعك لتكييف تجربة التوأم الرقمي بناءً على الطقس والوقت من اليوم.",
+        "NSMicrophoneUsageDescription": "يحتاج التطبيق للميكروفون للمحادثات الصوتية.",
+        "NSLocationWhenInUseUsageDescription": "يستخدم الموقع لتحسين تجربة التوأم.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -41,47 +41,18 @@
       "expo-router",
       "expo-font",
       "expo-secure-store",
-      [
-        "expo-av",
-        {
-          "microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية."
-        }
-      ],
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#6B21A8"
-        }
-      ],
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "compileSdkVersion": 35,
-            "targetSdkVersion": 35,
-            "minSdkVersion": 24
-          },
-          "ios": {
-            "deploymentTarget": "16.4"
-          }
-        }
-      ]
+      ["expo-av", {"microphonePermission": "يحتاج التطبيق للميكروفون للمحادثات الصوتية."}],
+      ["expo-notifications", {"icon": "./assets/notification-icon.png", "color": "#6B21A8"}],
+      ["expo-build-properties", {
+        "android": {"useFrameworks": "static", "compileSdkVersion": 35, "targetSdkVersion": 35, "minSdkVersion": 24},
+        "ios": {"deploymentTarget": "16.4"}      }]
     ],
     "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "b5e2baa3-6015-40a5-9f31-115298d3b0c9"
-      }
+      "router": {"origin": false},
+      "eas": {"projectId": "b5e2baa3-6015-40a5-9f31-115298d3b0c9"}
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"
-    },
+    "runtimeVersion": {"policy": "appVersion"},
+    "updates": {"url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"},
     "owner": "mohamed101"
   }
 }
