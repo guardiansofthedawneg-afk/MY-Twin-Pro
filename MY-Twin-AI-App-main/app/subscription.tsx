@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { initIAP, getProducts, purchaseSubscription, restorePurchases, TIER_MAP, disconnectIAP } from '../lib/iapService';
 import { Tier, useTwinStore } from '../store/useTwinStore';
 import { CheckCircle2 } from 'lucide-react-native';
-import type { Subscription } from 'react-native-iap';
 
 type Plan = {
   id: Tier;

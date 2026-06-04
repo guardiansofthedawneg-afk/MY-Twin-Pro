@@ -1,77 +1,56 @@
 import { Platform } from 'react-native';
-import {
-  Subscription,
-  SubscriptionPurchase,
-  requestSubscription,
-  getSubscriptions,
-  finishTransaction,
-  endConnection,
-} from 'react-native-iap';
+import * as InAppPurchases from 'expo-in-app-purchases';
 
-const productIds = ['plus_monthly', 'premium_monthly', 'pro_semiannual', 'yearly_annual'];
+export const PRODUCT_SKUS = [
+  'plus_monthly',
+  'premium_monthly',
+  'pro_semiannual',
+  'yearly_annual',
+];
 
 export const TIER_MAP: Record<string, string> = {
-  plus_monthly: 'plus',
-  premium_monthly: 'premium',
-  pro_semiannual: 'pro',
-  yearly_annual: 'yearly',
+  'plus_monthly':    'plus',
+  'premium_monthly': 'premium',
+  'pro_semiannual':  'pro',
+  'yearly_annual':   'yearly',
 };
 
-let connected = false;
-
-export async function initIAP(): Promise<void> {
-  if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    try {
-      await endConnection();
-      connected = true;
-    } catch (e) {
-      console.log('IAP init error', e);
-    }
-  }
-}
-
-export async function getProducts(): Promise<Subscription[]> {
-  if (!connected) await initIAP();
+export const initIAP = async (): Promise<void> => {
+  if (Platform.OS !== 'android') return;
   try {
-    const subscriptions = await getSubscriptions({ skus: productIds });
-    return subscriptions;
+    await InAppPurchases.connectAsync();
   } catch (e) {
-    console.log('getProducts error', e);
-    return [];
+    console.error('IAP init error:', e);
   }
-}
+};
 
-export async function purchaseSubscription(productId: string): Promise<boolean> {
+export const getProducts = async (): Promise<InAppPurchases.IAPItemDetails[]> => {
+  if (Platform.OS !== 'android') return [];
   try {
-    const result = await requestSubscription({ sku: productId });
-    if (result) {
-      const purchase: SubscriptionPurchase = Array.isArray(result) ? result[0] : result;
-      if (purchase) {
-        // finishTransaction يتوقع Purchase عامًا، لكن SubscriptionPurchase يمتد منه
-        await finishTransaction({ purchase: purchase as any, isConsumable: false });
-        return true;
-      }
-    }
-    return false;
+    const { responseCode, results } = await InAppPurchases.getProductsAsync(PRODUCT_SKUS);
+    if (responseCode === InAppPurchases.IAPResponseCode.OK) return results || [];
   } catch (e) {
-    console.log('purchase error', e);
-    return false;
+    console.error('getProducts error:', e);
   }
-}
+  return [];
+};
 
-export async function restorePurchases(): Promise<Subscription[]> {
+export const purchaseSubscription = async (productId: string): Promise<void> => {
+  if (Platform.OS !== 'android') return;
+  await InAppPurchases.purchaseItemAsync(productId);
+};
+
+export const restorePurchases = async (): Promise<InAppPurchases.InAppPurchase[]> => {
+  if (Platform.OS !== 'android') return [];
   try {
-    const subscriptions = await getSubscriptions({ skus: productIds });
-    return subscriptions;
+    const { responseCode, results } = await InAppPurchases.getPurchaseHistoryAsync();
+    if (responseCode === InAppPurchases.IAPResponseCode.OK) return results || [];
   } catch (e) {
-    console.log('restore error', e);
-    return [];
+    console.error('restore error:', e);
   }
-}
+  return [];
+};
 
-export function disconnectIAP(): void {
-  try {
-    endConnection();
-    connected = false;
-  } catch (e) {}
-}
+export const disconnectIAP = async (): Promise<void> => {
+  try { await InAppPurchases.disconnectAsync(); } catch {}
+};
