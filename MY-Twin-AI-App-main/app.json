@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "MyTwin",
-    "slug": "my-twin-pro",
+    "slug": "my-twin-final",
     "scheme": "mytwin",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -77,7 +77,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "c234bd89-737f-497c-8bbb-b5d424260b8b"
+        "projectId": "4853af19-954a-4801-8f7c-e94604503bee"
       }
     },
     "runtimeVersion": {
