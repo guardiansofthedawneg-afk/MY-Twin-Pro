@@ -10,15 +10,14 @@ export default function SideMenu({ onClose }: { onClose: () => void }) {
   const t = (ar: string, en: string) => isAr ? ar : en;
 
   const startNewChat = () => {
-    clearHistory(); // مسح المحادثة الحالية
+    clearHistory();
     onClose();
-    router.push('/chat'); // الانتقال إلى شاشة الدردشة
+    router.push('/chat');
   };
 
   const items = [
     { icon: Home, label: t('الرئيسية','Home'), route: '/chat' as Href },
-    { icon: PlusCircle, label: t('دردشة جديدة','New Chat'), onPress: startNewChat }, // زر جديد
-    { icon: MessageCircle, label: t('دردشة','Chat'), route: '/chat' as Href },
+    { icon: PlusCircle, label: t('دردشة جديدة','New Chat'), onPress: startNewChat },
     { icon: History, label: t('سجل المحادثات','History'), route: '/history' as Href },
     { icon: User, label: t('الملف الشخصي','Profile'), route: '/profile' as Href },
     { icon: BrainCircuit, label: t('ذكريات','Memories'), route: '/memories' as Href },

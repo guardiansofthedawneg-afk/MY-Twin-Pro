@@ -1,4 +1,4 @@
-"""MyTwin API v6.3.0 — Production Ready"""
+"""MyTwin API v7.0 — Production Ready"""
 import os, asyncio, logging, hmac, hashlib, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -13,7 +13,7 @@ from twin_brain import TwinBrain
 from rate_limiter import limiter, rate_limit_exceeded_handler
 from token_limits import check_tok, BASE_TOK
 from cache import get as cache_get, set as cache_set
-from emotional_engine import calc_energy, tts_params
+from emotional_engine import calc_energy, tts_params, get_voice_emotion
 from time import time
 from monitoring import AIMonitor
 from multi_ai import AIUnavailable
@@ -58,7 +58,7 @@ brain = TwinBrain(GEMINI_KEY)
 from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
-app = FastAPI(title="MyTwin API", version="6.3.0")
+app = FastAPI(title="MyTwin API", version="7.0.0")
 
 # ─── Monitoring Middleware ─────────────────────────────────────
 @app.middleware("http")
@@ -79,7 +79,7 @@ async def csrf_check(request: Request, call_next):
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Cron-Key", "X-Requested-With"], allow_credentials=True, max_age=600)
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-Cron-Key", "X-Requested-With", "X-Country-Code", "X-Twin-Gender"], allow_credentials=True, max_age=600)
 
 async def run_async(fn, *args):
     loop = asyncio.get_running_loop()
@@ -129,14 +129,24 @@ class ChatReq(BaseModel):
     history: list = Field(default_factory=list)
 
 @app.get("/")
-async def root(): return {"status":"ok","version":"6.3.0"}
+async def root(): return {"status":"ok","version":"7.0.0"}
 @app.get("/health")
-async def health(): return {"status":"ok","version":"6.3.0"}
+async def health(): return {"status":"ok","version":"7.0.0"}
 
 @app.post("/api/chat")
 @limiter.limit("30/minute")
-async def chat(request: Request, body: ChatReq, uid=Depends(get_user), calm: str = Header("false")):
+async def chat(
+    request: Request,
+    body: ChatReq,
+    uid=Depends(get_user),
+    calm: str = Header("false"),
+    x_country_code: str = Header("SA"),
+    x_twin_gender: str = Header("female")
+):
     is_calm = calm.lower() == "true"
+    country_code = x_country_code or "SA"
+    twin_gender = x_twin_gender or "female"
+    
     p = await get_profile(uid)
     tier = p.get("tier","free")
     sd = p.get("signup_date") or p.get("created_at", datetime.now(timezone.utc).isoformat())
@@ -178,22 +188,18 @@ async def chat(request: Request, body: ChatReq, uid=Depends(get_user), calm: str
     try:
         res = await run_async(lambda: brain.respond(
             message=body.message, twin_name=body.twin_name, bond_level=body.bond_level,
-            dims=body.dims, memories=mems, history=body.history[-10:], calm=is_calm, personality=personality_data
+            dims=body.dims, memories=mems, history=body.history[-10:], calm=is_calm,
+            personality=personality_data, country_code=country_code
         ))
         AIMonitor.log(
-            db=db,
-            uid=uid,
-            provider=res.get("provider"),
-            task=res.get("task", "general"),
-            latency=res.get("latency_ms", 0),
-            success=True,
-            tokens=est
+            db=db, uid=uid, provider=res.get("provider"),
+            task=res.get("task", "general"), latency=res.get("latency_ms", 0),
+            success=True, tokens=est
         )
     except AIUnavailable:
         return {
             "reply": "أواجه حالياً ضغطاً تقنياً مؤقتاً، لكنني ما زلت معك وسأعود للعمل الكامل خلال لحظات 💜",
-            "provider": "fallback",
-            "confidence": 0
+            "provider": "fallback", "confidence": 0
         }
     except Exception as e:
         logger.error(f"brain: {e}")
@@ -216,9 +222,31 @@ async def chat(request: Request, body: ChatReq, uid=Depends(get_user), calm: str
             asyncio.create_task(run_async(lambda: store_mem(uid, body.message, res.get("importance", 0.5), res.get("emotion", {}).get("primary", "neutral"))))
         except Exception as exc:
             logger.warning(f"memory store task failed: {exc}")
+    
     energy = calc_energy(p.get("last_active",""), p.get("daily_msgs",0), res.get("emotion",{}).get("primary","neutral"))
-    voice = tts_params(res.get("emotion",{}).get("primary","neutral"), is_calm)
-    resp = {"reply": res["reply"], "new_bond": res["new_bond"], "emotion": res["emotion"], "energy": energy, "tts": voice, "tokens_left": rem, "provider": res.get("provider","gemini_flash")}
+    
+    # ✅ تكامل الصوت: إعدادات TTS حسب المشاعر والباقة والجنس
+    emotion_data = res.get("emotion", {})
+    voice_emotion = get_voice_emotion(emotion_data)
+    voice = tts_params(emotion_data.get("primary", "neutral"), is_calm)
+    
+    # ✅ إضافة dialect code للصوت
+    from dialect_engine import get_voice_dialect
+    voice_dialect = get_voice_dialect(country_code)
+    
+    resp = {
+        "reply": res["reply"],
+        "new_bond": res["new_bond"],
+        "emotion": res["emotion"],
+        "energy": energy,
+        "tts": voice,
+        "tts_tier": tier,
+        "tts_gender": twin_gender,
+        "tts_emotion": voice_emotion,
+        "tts_dialect": voice_dialect,
+        "tokens_left": rem,
+        "provider": res.get("provider","gemini_flash")
+    }
     if "dream_data" in res: resp["dream"] = res["dream_data"]
     if "coaching_data" in res: resp["coaching"] = res["coaching_data"]
     if sug: resp["suggestion"] = sug
