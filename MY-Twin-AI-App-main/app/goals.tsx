@@ -1,154 +1,48 @@
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { SafeAreaView, View, Text, StyleSheet, FlatList } from 'react-native';
 import { useTwinStore } from '../store/useTwinStore';
-
-type GoalItem = {
-  id: string;
-  title: string;
-  description?: string;
-  progress: number;
-  completed?: boolean;
-};
+import { Target, CheckCircle2, Circle } from 'lucide-react-native';
 
 export default function Goals() {
-  const { userId } = useTwinStore();
-  const [goals, setGoals] = useState<GoalItem[]>([]);
-  const [title, setTitle] = useState('');
-  const [desc, setDesc] = useState('');
+  const { lang, theme } = useTwinStore();
+  const isAr = lang === 'ar';
+  const isDark = theme === 'dark';
+  const t = (ar: string, en: string) => isAr ? ar : en;
 
-  const fetchGoals = useCallback(async () => {
-    if (!userId) return;
-    const { data } = await supabase
-      .from('goals')
-      .select('*')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false });
-    setGoals(data || []);
-  }, [userId]);
-
-  useEffect(() => {
-    fetchGoals();
-  }, [fetchGoals]);
-
-  const addGoal = async () => {
-    if (!title.trim()) return;
-    await supabase.from('goals').insert({
-      user_id: userId,
-      title: title.trim(),
-      description: desc.trim(),
-    });
-    setTitle('');
-    setDesc('');
-    fetchGoals();
-  };
-
-  const updateProgress = async (id: string, current: number) => {
-    const newProgress = Math.min(current + 10, 100);
-    await supabase
-      .from('goals')
-      .update({ progress: newProgress })
-      .eq('id', id);
-    setGoals(prev =>
-      prev.map(g => (g.id === id ? { ...g, progress: newProgress } : g))
-    );
-  };
-
-  const deleteGoal = async (id: string) => {
-    await supabase.from('goals').delete().eq('id', id);
-    fetchGoals();
-  };
+  const goals = [
+    { id: '1', title: t('التحدث يومياً','Daily chat'), done: true },
+    { id: '2', title: t('إكمال تحليل الشخصية','Complete personality analysis'), done: true },
+    { id: '3', title: t('تدريب حياتي','Life coaching'), done: false },
+    { id: '4', title: t('تحليل حلم','Dream analysis'), done: false },
+  ];
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.header}>🎯 أهدافي</Text>
-
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          placeholder="هدف جديد"
-          placeholderTextColor="#8B7BA3"
-          value={title}
-          onChangeText={setTitle}
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+      <View style={s.container}>
+        <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('أهدافي','My Goals')}</Text>
+        <FlatList
+          data={goals}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+              {item.done ? (
+                <CheckCircle2 size={20} stroke="#10B981" />
+              ) : (
+                <Circle size={20} stroke={isDark ? '#666' : '#CCC'} />
+              )}
+              <Text style={[s.text, item.done && s.done, isDark && { color: item.done ? '#10B981' : '#FFF' }]}>{item.title}</Text>
+            </View>
+          )}
         />
-        <TextInput
-          style={styles.input}
-          placeholder="وصف (اختياري)"
-          placeholderTextColor="#8B7BA3"
-          value={desc}
-          onChangeText={setDesc}
-        />
-        <TouchableOpacity style={styles.addBtn} onPress={addGoal}>
-          <Text style={{ color: '#1A1226', fontWeight: 'bold', fontSize: 18 }}>+</Text>
-        </TouchableOpacity>
       </View>
-
-      <FlatList
-        data={goals}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.goal}>
-            <View style={styles.goalHeader}>
-              <Text style={styles.goalTitle}>{item.title}</Text>
-              <TouchableOpacity onPress={() => deleteGoal(item.id)}>
-                <Text style={{ color: '#FF6B6B', fontSize: 16 }}>🗑️</Text>
-              </TouchableOpacity>
-            </View>
-            {item.description ? <Text style={styles.desc}>{item.description}</Text> : null}
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${item.progress}%` }]} />
-            </View>
-            <Text style={styles.progressText}>{item.progress}%</Text>
-            {!item.completed && (
-              <TouchableOpacity
-                style={styles.updateBtn}
-                onPress={() => updateProgress(item.id, item.progress)}
-              >
-                <Text style={{ color: '#E0AAFF' }}>تحديث +10%</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-      />
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF', padding: 20 },
-  header: { fontSize: 22, fontWeight: '700', color: '#1A1226', marginBottom: 16 },
-  inputRow: { flexDirection: 'row', marginBottom: 16, gap: 8 },
-  input: { flex: 1, backgroundColor: '#F8F6F2', color: '#1A1226', padding: 10, borderRadius: 8 },
-  addBtn: {
-    backgroundColor: '#E0AAFF',
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  goal: {
-    backgroundColor: '#F8F6F2',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  goalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 4,
-  },
-  goalTitle: { color: '#1A1226', fontWeight: '600', fontSize: 16 },
-  desc: { color: '#8B7BA3', marginTop: 4 },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#2D1B4D',
-    borderRadius: 3,
-    marginTop: 8,
-    overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: '#E0AAFF' },
-  progressText: { color: '#1A1226', fontSize: 12, marginTop: 4 },
-  updateBtn: { marginTop: 8 },
+const s = StyleSheet.create({
+  safe: { flex: 1 },
+  container: { flex: 1, padding: 20, backgroundColor: '#F8F6F2' },
+  title: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', marginBottom: 20 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
+  text: { fontSize: 15, color: '#1A1A1A', flex: 1 },
+  done: { textDecorationLine: 'line-through', color: '#10B981' },
 });

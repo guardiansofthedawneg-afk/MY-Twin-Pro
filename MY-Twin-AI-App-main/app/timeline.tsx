@@ -1,168 +1,46 @@
-import { View, Text, FlatList, StyleSheet } from 'react-native';
-import { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { SafeAreaView, View, Text, StyleSheet, FlatList } from 'react-native';
 import { useTwinStore } from '../store/useTwinStore';
-
-const TEXTS = {
-  ar: {
-    header: '📅 خط الذكريات',
-    loading: 'تحميل...',
-    empty: 'لا توجد ذكريات بعد.\nتحدث مع توأمك لإنشاء أول ذكرى!',
-    important: '⭐ ذكرى مهمة',
-    today: 'اليوم',
-    yesterday: 'أمس',
-  },
-  en: {
-    header: '📅 Memory Timeline',
-    loading: 'Loading...',
-    empty: 'No memories yet.\nChat with your twin to create your first memory!',
-    important: '⭐ Important Memory',
-    today: 'Today',
-    yesterday: 'Yesterday',
-  },
-};
-
-function formatDate(iso: string, lang: 'ar' | 'en'): string {
-  const t = TEXTS[lang];
-  const now = new Date();
-  const date = new Date(iso);
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / 86400000);
-
-  if (days === 0) return `${t.today} ${date.toLocaleTimeString(lang === 'ar' ? 'ar-EG' : 'en-US', { hour: '2-digit', minute: '2-digit' })}`;
-  if (days === 1) return t.yesterday;
-
-  return date.toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-type TimelineMemory = {
-  id: string;
-  content: string;
-  created_at: string;
-  emotional_tag?: string;
-  importance_score?: number;
-};
+import { History } from 'lucide-react-native';
 
 export default function Timeline() {
-  const { userId } = useTwinStore();
-  const [memories, setMemories] = useState<TimelineMemory[]>([]);
-  const [loading, setLoading] = useState(true);
-  const lang: 'ar' | 'en' = 'ar';
-  const t = TEXTS[lang];
+  const { lang, theme } = useTwinStore();
+  const isAr = lang === 'ar';
+  const isDark = theme === 'dark';
+  const t = (ar: string, en: string) => isAr ? ar : en;
 
-  useEffect(() => {
-    if (!userId) return;
-    supabase
-      .from('memories')
-      .select('id, content, created_at, emotional_tag, importance_score')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        setMemories((data || []) as TimelineMemory[]);
-        setLoading(false);
-      });
-  }, [userId]);
+  const memories = [
+    { id: '1', date: '2026-06-01', text: t('أول محادثة','First chat') },
+    { id: '2', date: '2026-06-02', text: t('تحليل شخصية','Personality analysis') },
+    { id: '3', date: '2026-06-03', text: t('تدريب حياتي','Life coaching') },
+  ];
 
   return (
-    <FlatList
-      style={styles.container}
-      data={memories}
-      keyExtractor={(item) => item.id}
-      ListHeaderComponent={<Text style={styles.header}>{t.header}</Text>}
-      ListEmptyComponent={
-        loading ? (
-          <Text style={styles.empty}>{t.loading}</Text>
-        ) : (
-          <Text style={styles.empty}>{t.empty}</Text>
-        )
-      }
-      renderItem={({ item }: { item: TimelineMemory }) => (
-        <View style={styles.item}>
-          <View style={styles.tagRow}>
-            {item.emotional_tag && (
-              <View style={styles.tag}>
-                <Text style={styles.tagText}>{item.emotional_tag}</Text>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+      <View style={s.container}>
+        <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('خط الذكريات','Memory Timeline')}</Text>
+        <FlatList
+          data={memories}
+          keyExtractor={item => item.id}
+          renderItem={({ item }) => (
+            <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+              <History size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+              <View>
+                <Text style={[s.text, isDark && { color: '#FFF' }]}>{item.text}</Text>
+                <Text style={s.date}>{item.date}</Text>
               </View>
-            )}
-            <Text style={styles.date}>{formatDate(item.created_at, lang)}</Text>
-          </View>
-          <Text style={styles.content}>{item.content}</Text>
-          {item.importance_score != null && item.importance_score > 0.7 && (
-            <Text style={styles.star}>{t.important}</Text>
+            </View>
           )}
-        </View>
-      )}
-      contentContainerStyle={{ paddingBottom: 20 }}
-    />
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 16,
-    paddingTop: 20,
-  },
-  header: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#1A1226',
-    marginBottom: 20,
-  },
-  item: {
-    backgroundColor: '#F8F6F2',
-    padding: 14,
-    borderRadius: 12,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: '#E0D9F5',
-  },
-  tagRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-    gap: 8,
-  },
-  tag: {
-    backgroundColor: '#F3F0FF',
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#E0D9F5',
-  },
-  tagText: {
-    color: '#5B4AE0',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  date: {
-    color: '#8B7BA3',
-    fontSize: 11,
-  },
-  content: {
-    color: '#1A1226',
-    fontSize: 14,
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  star: {
-    color: '#F59E0B',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  empty: {
-    color: '#8B7BA3',
-    textAlign: 'center',
-    marginTop: 40,
-    fontSize: 14,
-    lineHeight: 22,
-  },
+const s = StyleSheet.create({
+  safe: { flex: 1 },
+  container: { flex: 1, padding: 20, backgroundColor: '#F8F6F2' },
+  title: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', marginBottom: 20 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
+  text: { fontSize: 15, color: '#1A1A1A' },
+  date: { fontSize: 12, color: '#888', marginTop: 4 },
 });

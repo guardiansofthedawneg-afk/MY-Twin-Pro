@@ -1,92 +1,42 @@
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../lib/supabase';
+import { SafeAreaView, View, Text, StyleSheet, FlatList } from 'react-native';
 import { useTwinStore } from '../store/useTwinStore';
-import { COLORS, FONTS } from '../utils/theme';
-
-const TEXTS = {
-  ar: { title: '📚 المحادثات السابقة', search: 'بحث...', all: 'الكل', today: 'اليوم', week: 'أسبوع', month: 'شهر', empty: 'لا توجد محادثات بعد', delete: 'حذف', deleteConfirm: 'هل أنت متأكد من حذف هذه المحادثة؟' },
-  en: { title: '📚 Chat History', search: 'Search...', all: 'All', today: 'Today', week: 'Week', month: 'Month', empty: 'No conversations yet', delete: 'Delete', deleteConfirm: 'Are you sure you want to delete this chat?' },
-};
-
-type HistoryMessage = {
-  id: string;
-  content: string;
-  created_at: string;
-};
+import { History as HistoryIcon, MessageCircle } from 'lucide-react-native';
 
 export default function History() {
-  const { userId, lang } = useTwinStore();
-  const [messages, setMessages] = useState<HistoryMessage[]>([]);
-  const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
-  const t = TEXTS[lang] || TEXTS.ar;
-  const getFilterLabel = (filterKey: string) => {
-    switch (filterKey) {
-      case 'today': return t.today;
-      case 'week': return t.week;
-      case 'month': return t.month;
-      default: return t.all;
-    }
-  };
-
-  const fetchMessages = useCallback(async () => {
-    if (!userId) return;
-    let query = supabase.from('messages').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50);
-    if (filter === 'today') query = query.gte('created_at', new Date().toISOString().split('T')[0]);
-    else if (filter === 'week') query = query.gte('created_at', new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString());
-    else if (filter === 'month') query = query.gte('created_at', new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
-    if (search) query = query.ilike('content', `%${search}%`);
-    const { data } = await query;
-    setMessages(data || []);
-  }, [userId, filter, search]);
-
-  useEffect(() => { fetchMessages(); }, [fetchMessages]);
-
-  const deleteMessage = async (id: string) => {
-    Alert.alert(t.delete, t.deleteConfirm, [
-      { text: lang === 'ar' ? 'إلغاء' : 'Cancel', style: 'cancel' },
-      { text: t.delete, style: 'destructive', onPress: async () => { await supabase.from('messages').delete().eq('id', id); fetchMessages(); } },
-    ]);
-  };
+  const { lang, theme, chatHistory } = useTwinStore();
+  const isAr = lang === 'ar';
+  const isDark = theme === 'dark';
+  const t = (ar: string, en: string) => isAr ? ar : en;
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>{t.title}</Text>
-      <TextInput style={styles.searchInput} placeholder={t.search} placeholderTextColor={COLORS.textSecondary} value={search} onChangeText={setSearch} />
-      <View style={styles.filterRow}>
-        {['all', 'today', 'week', 'month'].map(f => (
-          <TouchableOpacity key={f} style={[styles.filterBtn, filter === f && styles.filterActive]} onPress={() => setFilter(f)}>
-            <Text style={[styles.filterText, filter === f && styles.filterActiveText]}>{getFilterLabel(f)}</Text>
-          </TouchableOpacity>
-        ))}
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+      <View style={s.container}>
+        <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('سجل المحادثات','Chat History')}</Text>
+        <FlatList
+          data={[...chatHistory].reverse()}
+          keyExtractor={(_, i) => i.toString()}
+          ListEmptyComponent={<Text style={[s.empty, isDark && { color: '#666' }]}>{t('لا توجد محادثات','No conversations')}</Text>}
+          renderItem={({ item }) => (
+            <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+              <MessageCircle size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+              <View style={{ flex: 1 }}>
+                <Text style={[s.role, isDark && { color: '#D8B4FE' }]}>{item.role === 'user' ? t('أنت','You') : t('التوأم','Twin')}</Text>
+                <Text style={[s.content, isDark && { color: '#CCC' }]} numberOfLines={2}>{item.content}</Text>
+              </View>
+            </View>
+          )}
+        />
       </View>
-      <FlatList data={messages} keyExtractor={(item) => item.id} renderItem={({ item }: { item: HistoryMessage }) => (
-        <View style={styles.chatItem}>
-          <View style={styles.chatInfo}>
-            <Text style={styles.chatDate}>{new Date(item.created_at).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-US')}</Text>
-            <Text style={styles.chatPreview} numberOfLines={1}>{item.content}</Text>
-          </View>
-          <TouchableOpacity onPress={() => deleteMessage(item.id)}><Text style={styles.deleteIcon}>🗑️</Text></TouchableOpacity>
-        </View>
-      )} ListEmptyComponent={<Text style={styles.empty}>{t.empty}</Text>} />
-    </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg, padding: 16 },
-  title: { fontSize: FONTS.title, fontWeight: '800', color: COLORS.text, marginBottom: 16 },
-  searchInput: { backgroundColor: COLORS.card, color: COLORS.text, padding: 12, borderRadius: 12, fontSize: FONTS.body, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border },
-  filterRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  filterBtn: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.border },
-  filterActive: { backgroundColor: COLORS.primary },
-  filterText: { color: COLORS.text, fontSize: FONTS.small },
-  filterActiveText: { color: COLORS.white },
-  chatItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: COLORS.card, padding: 16, borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border },
-  chatInfo: { flex: 1 },
-  chatDate: { color: COLORS.textSecondary, fontSize: FONTS.small, marginBottom: 4 },
-  chatPreview: { color: COLORS.text, fontSize: FONTS.body },
-  deleteIcon: { fontSize: 20 },
-  empty: { textAlign: 'center', color: COLORS.textSecondary, marginTop: 40, fontSize: FONTS.body },
+const s = StyleSheet.create({
+  safe: { flex: 1 },
+  container: { flex: 1, padding: 20, backgroundColor: '#F8F6F2' },
+  title: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', marginBottom: 20 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
+  role: { fontSize: 12, fontWeight: '700', color: '#6B21A8' },
+  content: { fontSize: 14, color: '#1A1A1A', marginTop: 2 },
+  empty: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
 });
