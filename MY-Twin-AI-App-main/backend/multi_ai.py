@@ -1,3 +1,6 @@
+class AIUnavailable(Exception):
+    pass
+
 """
 MyTwin - Multi AI Client v2.0
 8 نماذج AI مع توجيه ذكي حسب المهمة والباقة
