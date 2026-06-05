@@ -1,3 +1,4 @@
+import SideMenu from '../components/SideMenu';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar, ListRenderItemInfo, InteractionManager } from 'react-native';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -252,6 +253,8 @@ export default function Chat() {
             </View>
           </View>
           <View style={s.headerRight}>
+<View style={[s.statusBadge, isDark && { backgroundColor: "#2A2A2A" }]}><Text style={s.statusIcon}>💜</Text><Text style={[s.statusText, isDark && { color: "#D8B4FE" }]}>{Math.round(bondLevel)}%</Text></View>
+<View style={[s.statusBadge, isDark && { backgroundColor: "#2A2A2A" }]}><Text style={s.statusIcon}>⚡</Text><Text style={[s.statusText, isDark && { color: "#D8B4FE" }]}>{Math.round(energy)}%</Text></View>
             <AnimBtn onPress={() => setSoundEnabled(prev => !prev)} style={s.iconBtn}>
               {soundEnabled ? <Volume2 size={20} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /> : <VolumeX size={20} stroke="#999" />}
             </AnimBtn>

@@ -18,12 +18,16 @@ export default function Mood() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
       <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
         <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('لوحة المشاعر','Mood Board')}</Text>
         <HeartPulse size={40} stroke={isDark ? '#D8B4FE' : '#6B21A8'} style={{ alignSelf: 'center', marginBottom: 24 }} />
         {moods.map((m, i) => {
           const Icon = m.icon;
           return (
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
             <View key={i} style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
               <Icon size={24} stroke={m.color} />
               <Text style={[s.label, isDark && { color: '#FFF' }]}>{m.label}</Text>
@@ -32,6 +36,8 @@ export default function Mood() {
           );
         })}
       </ScrollView>
+    </SafeAreaView>
+    </SafeAreaView>
     </SafeAreaView>
   );
 }

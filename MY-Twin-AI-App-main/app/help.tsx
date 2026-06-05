@@ -10,6 +10,8 @@ export default function Help() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
       <View style={s.container}>
         <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('المساعدة','Help')}</Text>
         <HelpCircle size={40} stroke={isDark ? '#D8B4FE' : '#6B21A8'} style={{ alignSelf: 'center', marginBottom: 20 }} />

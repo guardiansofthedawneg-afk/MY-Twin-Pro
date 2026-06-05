@@ -60,6 +60,8 @@ export default function Profile() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
     <ScrollView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]} contentContainerStyle={{ paddingBottom:40 }}>
       <Text style={[s.title, isDark && { color: '#FFF' }]}>{t.title}</Text>
       <View style={[s.card, isDark && { backgroundColor: '#2A2A2A', borderColor: '#333' }]}>
@@ -99,6 +101,8 @@ export default function Profile() {
       <TouchableOpacity style={[s.btn, s.outlineBtn]} onPress={handleLogout}><LogOut size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.btnText,{color: isDark ? '#D8B4FE' : '#6B21A8'}]}>{t.logout}</Text></TouchableOpacity>
       <TouchableOpacity style={[s.btn, s.dangerBtn]} onPress={handleDelete}><Trash2 size={16} stroke="#EF4444" /><Text style={[s.btnText,{color:'#EF4444'}]}>{t.deleteAccount}</Text></TouchableOpacity>
     </ScrollView>
+    </SafeAreaView>
+    </SafeAreaView>
     </SafeAreaView>
   );
 }

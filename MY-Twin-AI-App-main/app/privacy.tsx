@@ -10,6 +10,8 @@ export default function Privacy() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
       <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
         <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('سياسة الخصوصية','Privacy Policy')}</Text>
         <Shield size={40} stroke={isDark ? '#D8B4FE' : '#6B21A8'} style={{ alignSelf: 'center', marginBottom: 20 }} />
@@ -17,6 +19,8 @@ export default function Privacy() {
           {t('نحن نحمي خصوصيتك...','We protect your privacy...')}
         </Text>
       </ScrollView>
+    </SafeAreaView>
+    </SafeAreaView>
     </SafeAreaView>
   );
 }

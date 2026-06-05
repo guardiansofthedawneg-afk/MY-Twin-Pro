@@ -11,6 +11,7 @@ import CustomDrawerContent from "../components/CustomDrawerContent";
 import { ToastProvider } from "../components/Toast";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
+// ... (مكون SideMenu يبقى كما هو)
 const SideMenu = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
   const slideAnim = useRef(new Animated.Value(-300)).current;
 
@@ -37,8 +38,32 @@ const SideMenu = ({ visible, onClose }: { visible: boolean; onClose: () => void 
 
 export default function Layout() {
   const { setAuth } = useTwinStore();
-  const initialized = useRef(false);
   const [menuVisible, setMenuVisible] = useState(false);
+
+  // ✅ الإصلاح: ضبط التوكن عند بدء التشغيل وعند تغير الجلسة
+  useEffect(() => {
+    // 1. استعادة الجلسة الحالية
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.access_token) {
+        setToken(session.access_token);
+        console.log('✅ Token restored from session');
+      }
+    });
+
+    // 2. الاستماع لتغييرات المصادقة (تسجيل دخول، خروج)
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.access_token) {
+        setToken(session.access_token);
+        console.log('✅ Token updated on auth change:', event);
+      } else {
+        setToken(''); // مسح التوكن عند الخروج
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
+  }, []);
 
   return (
     <ErrorBoundary>

@@ -49,6 +49,11 @@ export default function Onboarding() {
     try {
       const analysis = analyzePersonality(answers);
       await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
+    // إرسال رسالة تحليل الشخصية
+    try {
+      const analysis = analyzePersonality(answers);
+      await API.post('/api/chat', { message: , twin_name: twinName, bond_level: 0, dims: {} });
+    } catch (e) {}
       track('onboarding_completed', { personality_type: analysis.dominant_type });
       setStep(6);
     } catch { Alert.alert('خطأ', 'لم نتمكن من حفظ بياناتك'); }
@@ -104,7 +109,7 @@ export default function Onboarding() {
           <View style={s.genderRow}>
             {(['female', 'male'] as TwinGender[]).map(g => (
               <TouchableOpacity key={g} style={[s.genderCard, twinGender === g && s.selectedCard, isDark && { backgroundColor: '#2A2A2A', borderColor: twinGender === g ? '#D8B4FE' : '#444' }]} onPress={() => setTwinGender(g)}>
-                <User size={40} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+                <Text style={{ fontSize: 48 }}>{g === 'female' ? '👩' : '👨'}</Text>
                 <Text style={[s.genderText, isDark && { color: '#FFF' }]}>{g === 'female' ? 'أنثى' : 'ذكر'}</Text>
               </TouchableOpacity>
             ))}

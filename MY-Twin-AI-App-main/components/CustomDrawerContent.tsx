@@ -10,7 +10,7 @@ export default function CustomDrawerContent({ onClose }: { onClose: () => void }
   const t = (ar: string, en: string) => isAr ? ar : en;
 
   const items = [
-    { icon: Home, label: t('الرئيسية','Home'), route: '/' },
+    { icon: Home, label: t('الرئيسية','Home'), route: '/chat' },
     { icon: MessageCircle, label: t('دردشة','Chat'), route: '/chat' },
     { icon: History, label: t('المحادثات السابقة','History'), route: '/history' },
     { icon: User, label: t('الملف الشخصي','Profile'), route: '/profile' },

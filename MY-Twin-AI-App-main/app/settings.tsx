@@ -45,6 +45,8 @@ export default function Settings() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
     <ScrollView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
       <View style={s.content}>
         <Text style={[s.title, isDark && { color: '#FFF' }]}>{t.title}</Text>
@@ -119,6 +121,8 @@ export default function Settings() {
         </View>
       </View>
     </ScrollView>
+    </SafeAreaView>
+    </SafeAreaView>
     </SafeAreaView>
   );
 }
