@@ -30,8 +30,6 @@ const PLANS: Plan[] = [
 function ConsciousnessBar({ layers, planId }: { layers: number; planId: string }) {
   const colors: Record<string, string> = { free:'#94A3B8', plus:'#F59E0B', premium:'#3B82F6', pro:'#8B5CF6', yearly:'#6B21A8' };
   return (
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
     <View style={cb.container}>
       <Text style={cb.label}>طبقات الوعي: {layers}/5</Text>
       <View style={cb.bar}>
@@ -52,9 +50,7 @@ export default function SubscriptionScreen() {
   useEffect(() => {
     const init = async () => { await initIAP(); const fetchedProducts = await getProducts(); setProducts(fetchedProducts); };
     init();
-    return (
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>) => { disconnectIAP(); };
+    return () => { disconnectIAP(); };
   }, []);
 
   const handlePurchase = async (plan: Plan) => {
@@ -86,8 +82,6 @@ export default function SubscriptionScreen() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
       <ScrollView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]} contentContainerStyle={s.content}>
         <View style={s.header}>
           <Text style={[s.title, isDark && { color: '#FFF' }]}>{isAr?'ارتقِ بوعي توأمك':"Elevate Your Twin's Consciousness"}</Text>
@@ -118,8 +112,6 @@ export default function SubscriptionScreen() {
         </TouchableOpacity>
         <Text style={s.footerNote}>{isAr?'يمكنك الإلغاء في أي وقت.':'Cancel anytime.'}</Text>
       </ScrollView>
-    </SafeAreaView>
-    </SafeAreaView>
     </SafeAreaView>
   );
 }

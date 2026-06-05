@@ -1,20 +1,21 @@
-import SideMenu from '../components/SideMenu';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar, ListRenderItemInfo, InteractionManager } from 'react-native';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
-import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, X, Menu, Home, MessageCircle, History, User, BrainCircuit, Palette, Diamond, Settings, HelpCircle, LogOut, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send } from 'lucide-react-native';
+import SideMenu from '../components/SideMenu';
+import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send } from 'lucide-react-native';
 
 function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
   const bg = isFemale ? '#E9D5FF' : '#DDD6FE';
   return (
     <View style={[avs.wrap, { width: size, height: size, borderRadius: size / 2, backgroundColor: bg }]}>
-      <User size={size * 0.55} stroke="#FFF" />
+      <Text style={{ fontSize: size * 0.55 }}>{isFemale ? '🌸' : '⚡'}</Text>
     </View>
   );
 }
@@ -67,48 +68,6 @@ function getSuggestions(lang: 'ar' | 'en') {
 }
 
 type ChatMessage = { role: 'user' | 'twin'; content: string };
-
-function SideMenu({ onClose }: { onClose: () => void }) {
-  const { lang } = useTwinStore();
-  const isAr = lang === 'ar';
-  const t = (ar: string, en: string) => isAr ? ar : en;
-  const items = [
-    { icon: Home, label: t('الرئيسية','Home'), route: '/' as Href },
-    { icon: MessageCircle, label: t('دردشة','Chat'), route: '/chat' as Href },
-    { icon: History, label: t('المحادثات السابقة','History'), route: '/history' as Href },
-    { icon: User, label: t('الملف الشخصي','Profile'), route: '/profile' as Href },
-    { icon: BrainCircuit, label: t('ذكريات','Memories'), route: '/memories' as Href },
-    { icon: Palette, label: t('تخصيص','Customize'), route: '/customize' as Href },
-    { icon: Diamond, label: t('الاشتراكات','Subscription'), route: '/subscription' as Href },
-    { icon: Settings, label: t('الإعدادات','Settings'), route: '/settings' as Href },
-  ];
-  return (
-    <View style={sideStyles.container}>
-      {items.map((item, i) => {
-        const Icon = item.icon;
-        return (
-          <TouchableOpacity key={i} style={sideStyles.item} onPress={() => { router.push(item.route); onClose(); }}>
-            <Icon size={20} stroke="#6B21A8" />
-            <Text style={sideStyles.label}>{item.label}</Text>
-          </TouchableOpacity>
-        );
-      })}
-      <TouchableOpacity style={sideStyles.item} onPress={() => { router.push('/help' as Href); onClose(); }}>
-        <HelpCircle size={20} stroke="#6B21A8" />
-        <Text style={sideStyles.label}>{t('مساعدة','Help')}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={sideStyles.item} onPress={() => { /* logout */ }}>
-        <LogOut size={20} stroke="#EF4444" />
-        <Text style={[sideStyles.label, { color: '#EF4444' }]}>{t('تسجيل الخروج','Logout')}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-const sideStyles = StyleSheet.create({
-  container: { padding: 20, gap: 8 },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  label: { fontSize: 15, color: '#1A1A1A' },
-});
 
 export default function Chat() {
   const insets = useSafeAreaInsets();
@@ -192,6 +151,11 @@ export default function Chat() {
       if (!p.granted) { Alert.alert('صلاحية', lang === 'ar' ? 'مطلوب إذن الصور' : 'Permission needed'); return; }
       const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true });
       if (!r.canceled && r.assets?.[0]?.base64) send('صورة مرفقة');
+    } else if (action === 'file') {
+      try {
+        const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
+        if (!res.canceled && res.assets?.[0]) send('📄 ملف مرفق');
+      } catch (e) { Alert.alert('خطأ', lang === 'ar' ? 'فشل اختيار الملف' : 'File selection failed'); }
     } else if (action === 'search') setInput('/search ');
     else if (action === 'coach') send(lang === 'ar' ? 'أريد جلسة تدريب' : 'Coaching session');
     else if (action === 'dream') send(lang === 'ar' ? 'أريد تحليل حلمي' : 'Dream analysis');
@@ -253,8 +217,14 @@ export default function Chat() {
             </View>
           </View>
           <View style={s.headerRight}>
-<View style={[s.statusBadge, isDark && { backgroundColor: "#2A2A2A" }]}><Text style={s.statusIcon}>💜</Text><Text style={[s.statusText, isDark && { color: "#D8B4FE" }]}>{Math.round(bondLevel)}%</Text></View>
-<View style={[s.statusBadge, isDark && { backgroundColor: "#2A2A2A" }]}><Text style={s.statusIcon}>⚡</Text><Text style={[s.statusText, isDark && { color: "#D8B4FE" }]}>{Math.round(energy)}%</Text></View>
+            <View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }]}>
+              <Text style={s.statusIcon}>💜</Text>
+              <Text style={[s.statusText, isDark && { color: '#D8B4FE' }]}>{Math.round(bondLevel)}%</Text>
+            </View>
+            <View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }]}>
+              <Text style={s.statusIcon}>⚡</Text>
+              <Text style={[s.statusText, isDark && { color: '#D8B4FE' }]}>{Math.round(energy)}%</Text>
+            </View>
             <AnimBtn onPress={() => setSoundEnabled(prev => !prev)} style={s.iconBtn}>
               {soundEnabled ? <Volume2 size={20} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /> : <VolumeX size={20} stroke="#999" />}
             </AnimBtn>
@@ -320,7 +290,7 @@ export default function Chat() {
                 );
               })}
               <AnimBtn style={s.attachItem} onPress={() => setShowAttach(false)}>
-                <X size={26} stroke="#EF4444" />
+                <Text style={{ fontSize: 24, color: '#EF4444' }}>✕</Text>
                 <Text style={[s.attachLabel, { color: '#EF4444' }]}>{lang === 'ar' ? 'إغلاق' : 'Close'}</Text>
               </AnimBtn>
             </Animated.View>
@@ -341,6 +311,9 @@ const s = StyleSheet.create({
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
   onlineText: { fontSize: 11, color: '#10B981', fontWeight: '500' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F0FF', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 10 },
+  statusIcon: { fontSize: 12, marginRight: 2 },
+  statusText: { fontSize: 11, fontWeight: '600', color: '#6B21A8' },
   iconBtn: { padding: 8 },
   crownBtn: { padding: 6 },
   listContent: { paddingHorizontal: 14, paddingVertical: 12, flexGrow: 1 },

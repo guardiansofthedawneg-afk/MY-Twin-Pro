@@ -2,6 +2,7 @@ import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, Act
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { API } from '../lib/api';
 import { useTwinStore, type TwinGender } from '../store/useTwinStore';
 import { Brain, ArrowRight, User, Sparkles } from 'lucide-react-native';
 import { track } from '../lib/analytics';
@@ -49,12 +50,11 @@ export default function Onboarding() {
     try {
       const analysis = analyzePersonality(answers);
       await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
-    // إرسال رسالة تحليل الشخصية
-    try {
-      const analysis = analyzePersonality(answers);
-      await API.post('/api/chat', { message: , twin_name: twinName, bond_level: 0, dims: {} });
-    } catch (e) {}
       track('onboarding_completed', { personality_type: analysis.dominant_type });
+      // إرسال رسالة تحليل الشخصية تلقائياً
+      try {
+        await API.post('/api/chat', { message: `مرحباً! أنا ${userName}. تم تحليل شخصيتي: ${analysis.dominant_type}. صفاتي: ${JSON.stringify(analysis.traits)}`, twin_name: twinName, bond_level: 0, dims: {} });
+      } catch (e) {}
       setStep(6);
     } catch { Alert.alert('خطأ', 'لم نتمكن من حفظ بياناتك'); }
     finally { setLoading(false); setStep(6); }
