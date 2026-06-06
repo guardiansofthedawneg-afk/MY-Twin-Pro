@@ -1,5 +1,5 @@
 """
-MyTwin – Proactive Engine v1.2 (Cron-Ready)
+MyTwin – Proactive Engine v1.3 (Cron-Ready)
 - رسائل عامية بشخصية GenZ Sage
 - دعم الإرسال الجماعي عبر Cron Job
 - تكامل مع OneSignal للإشعارات
@@ -23,11 +23,9 @@ class ProactiveEngine:
         self.last_proactive_time: Dict[str, datetime] = {}
 
     def should_send_proactive(self, user_id: str) -> bool:
-        """يتحقق مما إذا كان يجب إرسال رسالة استباقية لهذا المستخدم."""
         if not self.db:
             return False
         try:
-            # جلب آخر وقت تم إرسال رسالة استباقية فيه
             res = self.db.table("proactive_logs").select("sent_at").eq("user_id", user_id).order("sent_at", desc=True).limit(1).execute()
             if res.data and len(res.data) > 0:
                 last_sent = datetime.fromisoformat(res.data[0]["sent_at"].replace("Z", "+00:00"))
@@ -37,15 +35,8 @@ class ProactiveEngine:
         except:
             return True
 
-    async def generate_proactive_message(
-        self,
-        user_id: str,
-        user_name: str,
-        lang: str = "ar"
-    ) -> Optional[str]:
-        """يولد رسالة استباقية مناسبة بناءً على الوقت واللغة."""
+    async def generate_proactive_message(self, user_id: str, user_name: str, lang: str = "ar") -> Optional[str]:
         hour = datetime.now(timezone.utc).hour
-        
         if lang == "ar":
             if 6 <= hour < 12:
                 messages = [
@@ -81,15 +72,12 @@ class ProactiveEngine:
                     f"Good evening {user_name}! How was your day?",
                     f"Before you sleep, just wanted to say you're awesome ✨",
                 ]
-
         return random.choice(messages)
 
     async def send_notification(self, user_id: str, title: str, message: str) -> bool:
-        """إرسال إشعار عبر OneSignal."""
         if not ONESIGNAL_REST_API_KEY or not ONESIGNAL_APP_ID:
             logger.warning("OneSignal keys not configured")
             return False
-
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.post(
@@ -116,7 +104,6 @@ class ProactiveEngine:
             return False
 
     async def log_proactive(self, user_id: str, message: str):
-        """تسجيل الرسالة الاستباقية في قاعدة البيانات."""
         if not self.db:
             return
         try:
@@ -129,50 +116,34 @@ class ProactiveEngine:
             logger.warning(f"Failed to log proactive: {e}")
 
     async def run_cron_job(self) -> Dict[str, Any]:
-        """
-        تشغيل المهمة الدورية:
-        1. جلب جميع المستخدمين النشطين.
-        2. التحقق من استحقاق كل مستخدم لرسالة استباقية.
-        3. إرسال الإشعار وتسجيله.
-        """
         if not self.db:
             return {"status": "error", "message": "No database connection"}
-
         results = {"sent": 0, "skipped": 0, "errors": 0}
-
         try:
-            # جلب المستخدمين النشطين خلال آخر 24 ساعة
             yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
-            res = self.db.table("profiles").select("id, full_name, lang").gte("last_active", yesterday).execute()
-            
+            res = self.db.table("profiles").select("id, twin_name, lang").gte("last_active", yesterday).execute()
             if not res.data:
                 return {"status": "ok", "message": "No active users found", "results": results}
-
             for user in res.data:
                 user_id = user.get("id")
-                user_name = user.get("full_name", "صديقي")
+                user_name = user.get("twin_name") or "صديقي"
                 lang = user.get("lang", "ar")
-
                 if not self.should_send_proactive(user_id):
                     results["skipped"] += 1
                     continue
-
                 message = await self.generate_proactive_message(user_id, user_name, lang)
                 if not message:
                     continue
-
                 success = await self.send_notification(user_id, "MyTwin 💜", message)
                 if success:
                     await self.log_proactive(user_id, message)
                     results["sent"] += 1
                 else:
                     results["errors"] += 1
-
             return {"status": "ok", "message": "Cron job completed", "results": results}
         except Exception as e:
             logger.error(f"Cron job failed: {e}")
             return {"status": "error", "message": str(e), "results": results}
 
 
-# كائن عالمي للاستخدام في main.py
 proactive_engine = ProactiveEngine()
