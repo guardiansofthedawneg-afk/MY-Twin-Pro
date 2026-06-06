@@ -1,8 +1,8 @@
 """
-MyTwin – Proactive Engine v1.3 (Cron-Ready)
-- رسائل عامية بشخصية GenZ Sage
-- دعم الإرسال الجماعي عبر Cron Job
-- تكامل مع OneSignal للإشعارات
+MyTwin – Proactive Engine v2.0 (Memory- & Consciousness-Aware)
+- يولد رسائل استباقية مخصصة بناءً على وعي وذاكرة المستخدم
+- يتكيف حسب الوقت، اللغة، والمشاعر الأخيرة
+- يدعم العربية والإنجليزية
 """
 import os, logging, random, asyncio, json
 from typing import Optional, Dict, Any, List
@@ -35,44 +35,73 @@ class ProactiveEngine:
         except:
             return True
 
-    async def generate_proactive_message(self, user_id: str, user_name: str, lang: str = "ar") -> Optional[str]:
+    async def generate_proactive_message(
+        self,
+        user_id: str,
+        user_name: str,
+        lang: str = "ar"
+    ) -> Optional[str]:
+        """يولد رسالة استباقية مخصصة بناءً على الذاكرة والوعي."""
         hour = datetime.now(timezone.utc).hour
+        base_messages = self._get_time_based_messages(user_name, hour, lang)
+
+        # محاولة إضافة لمسة شخصية من الذاكرة
+        personal_touch = await self._get_personal_touch(user_id)
+        if personal_touch:
+            base_messages = [f"{msg} {personal_touch}" for msg in base_messages]
+
+        return random.choice(base_messages)
+
+    def _get_time_based_messages(self, user_name: str, hour: int, lang: str) -> List[str]:
         if lang == "ar":
             if 6 <= hour < 12:
-                messages = [
+                return [
                     f"صباح الخير يا {user_name}! يوم جديد وفرصة جديدة ✨",
                     f"صباح الفل يا صاحبي! مستعد ليوم حلو؟ 💜",
                     f"فكرت فيك الصبح، إيه أخبارك يا {user_name}؟",
                 ]
             elif 12 <= hour < 18:
-                messages = [
+                return [
                     f"كيف يومك حتى الآن يا {user_name}؟",
                     f"فكرت فيك، إيه اللي شاغل بالك النهاردة؟",
                     f"يا صاحبي، إيه آخر حاجة حلوة حصلتلك؟",
                 ]
             else:
-                messages = [
+                return [
                     f"مساء الخير يا {user_name}! كيف كان يومك؟",
                     f"ليلتك هادئة؟ أحكي لي عن يومك 💜",
                     f"قبل ما تنام، عايز أقولك إنك شخص رائع ✨",
                 ]
         else:
             if 6 <= hour < 12:
-                messages = [
+                return [
                     f"Good morning {user_name}! Ready for a great day? ✨",
                     f"Hey {user_name}! How are you feeling today? 💜",
                 ]
             elif 12 <= hour < 18:
-                messages = [
+                return [
                     f"How's your day going, {user_name}?",
                     f"Thinking of you! What's new?",
                 ]
             else:
-                messages = [
+                return [
                     f"Good evening {user_name}! How was your day?",
                     f"Before you sleep, just wanted to say you're awesome ✨",
                 ]
-        return random.choice(messages)
+
+    async def _get_personal_touch(self, user_id: str) -> Optional[str]:
+        """يحاول جلب لمسة شخصية من آخر ذاكرة أو هدف."""
+        try:
+            from memory_engine import get_memory_context
+            mem_ctx = await get_memory_context(user_id)
+            if mem_ctx:
+                # استخراج جملة قصيرة من السياق
+                parts = mem_ctx.split("|")
+                if parts:
+                    return f"({parts[0].strip()})"
+        except:
+            pass
+        return None
 
     async def send_notification(self, user_id: str, title: str, message: str) -> bool:
         if not ONESIGNAL_REST_API_KEY or not ONESIGNAL_APP_ID:

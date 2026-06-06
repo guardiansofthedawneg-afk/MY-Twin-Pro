@@ -11,7 +11,10 @@ export default function Help() {
   const faqs = [
     { q: t('كيف أغير اسم التوأم؟','How to change twin name?'), a: t('من الإعدادات > تخصيص التوأم','Settings > Customize Twin') },
     { q: t('كيف أشارك كود الإحالة؟','How to share referral?'), a: t('من القائمة > الإحالة','Menu > Referral') },
-    { q: t('هل محادثاتي خاصة؟','Are my chats private?'), a: t('نعم، جميع المحادثات مشفرة وخاصة بك.','Yes, all chats are encrypted and private.') },
+    { q: t('هل محادثاتي خاصة؟','Are my chats private?'), a: t('نعم، جميع المحادثات مشفرة.','Yes, all chats are encrypted.') },
+    { q: t('كيف أستمع لرد التوأم؟','How to hear twin reply?'), a: t('اضغط على أيقونة الصوت في الأعلى.','Press the volume icon on top.') },
+    { q: t('كيف أرفع صورة؟','How to upload an image?'), a: t('اضغط على + ثم اختر الكاميرا أو المعرض.','Press + then choose camera or gallery.') },
+    { q: t('ما الباقات المتاحة؟','What plans are available?'), a: t('Free, Plus, Premium, Pro, Yearly','Free, Plus, Premium, Pro, Yearly') },
   ];
 
   return (

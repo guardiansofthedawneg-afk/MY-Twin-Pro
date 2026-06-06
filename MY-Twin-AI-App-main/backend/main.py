@@ -223,3 +223,10 @@ async def del_acc(uid: str = Depends(get_user)):
 @app.get("/api/consciousness/state")
 async def get_consciousness(uid: str = Depends(get_user)):
     return consciousness.get_consciousness_state()
+
+# ========== Limits Tracking ==========
+@app.get("/api/limits/check")
+async def check_limits(uid: str = Depends(get_user), feature: str = ""):
+    """التحقق من استخدام الباقة المجانية لميزة معينة"""
+    # TODO: ربطها بـ Supabase
+    return {"feature": feature, "remaining": 2 if feature == "youtube" else 0}

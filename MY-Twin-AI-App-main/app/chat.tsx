@@ -94,6 +94,7 @@ export default function Chat() {
   const welcome = getWelcome(lang);
   const suggestions = getSuggestions(lang);
   const isFree = tier === 'free';
+  const [youtubeUsage, setYoutubeUsage] = useState(0);
   const isDark = theme === 'dark';
 
   // --- التمرير التلقائي الذكي ---
@@ -185,7 +186,7 @@ export default function Chat() {
 
   // --- الميكروفون ---
   const handleVoice = useCallback(async () => {
-    if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة للباقات المدفوعة' : 'Feature for paid plans'); return; }
+    if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة حصرية للباقات المدفوعة' : 'Feature exclusive to paid plans'); return; }
     try {
       const { startRecordingVoice, stopRecordingVoice } = require('../utils/voice_engine');
       if (isRecording) { setIsRecording(false); const text = await stopRecordingVoice(); if (text) send(text); }
@@ -207,7 +208,8 @@ export default function Chat() {
         const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
         if (!res.canceled && res.assets?.[0]) send('📄 ملف مرفق');
       } catch (e) { Alert.alert('خطأ', lang === 'ar' ? 'فشل اختيار الملف' : 'File selection failed'); }
-    } else if (action === 'search' || action === 'coach' || action === 'dream') {
+    } else if (action === 'coach' || action === 'dream') {
+      if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة حصرية للباقات المدفوعة' : 'Feature exclusive to paid plans'); return; }
       setFeatureModal({ visible: true, type: action });
       setFeatureInput('');
     } else {

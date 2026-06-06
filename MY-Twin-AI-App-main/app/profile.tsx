@@ -36,15 +36,21 @@ export default function Profile() {
 
   useEffect(() => {
     if (!userId) return;
-    supabase.from('profiles').select('*').eq('id', userId).single().then(({ data }) => { setProfile(data||{}); setName(data?.full_name||''); setPhone(data?.phone||''); });
+    // جلب بيانات الملف الشخصي من Supabase
+    supabase.from('profiles').select('*').eq('id', userId).single().then(({ data }) => {
+      const p = data || {};
+      setProfile(p);
+      setName(p.full_name || '');
+      setPhone(p.phone || '');
+    });
     const today = new Date().toISOString().split('T')[0];
-    supabase.from('daily_usage').select('*').eq('user_id', userId).eq('date', today).single().then(({ data }) => setUsage(data||{ messages:0 }));
+    supabase.from('daily_usage').select('*').eq('user_id', userId).eq('date', today).single().then(({ data }) => setUsage(data || { messages:0 }));
   }, [userId]);
 
   const handleSave = async () => {
     if (!userId) return;
-    await supabase.from('profiles').update({ full_name:name, phone }).eq('id', userId);
-    setProfile(p=>({...p, full_name:name, phone}));
+    await supabase.from('profiles').update({ full_name: name, phone }).eq('id', userId);
+    setProfile((p: any) => ({ ...p, full_name: name, phone }));
     if (name) setTwinName(name);
     setEditing(false);
     Alert.alert('✅', lang==='ar'?'تم حفظ التغييرات':'Changes saved');
@@ -82,9 +88,9 @@ export default function Profile() {
             </>
           ) : (
             <>
-              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><User size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.full_name||'—'}</Text></View>
-              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Mail size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.email||'—'}</Text></View>
-              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Phone size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.phone||'—'}</Text></View>
+              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><User size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.full_name || '—'}</Text></View>
+              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Mail size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.email || '—'}</Text></View>
+              <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Phone size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.phone || '—'}</Text></View>
               <TouchableOpacity style={s.editBtn} onPress={()=>setEditing(true)}><Edit size={14} stroke="#FFF" /><Text style={s.editBtnText}>{t.editProfile}</Text></TouchableOpacity>
             </>
           )}
@@ -92,8 +98,8 @@ export default function Profile() {
         <View style={[s.section, isDark && { backgroundColor: '#2A2A2A', borderColor: '#333' }]}>
           <Text style={[s.sectionTitle, isDark && { color: '#FFF' }]}>{t.usageInfo}</Text>
           <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Crown size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={s.label}>{t.tier}</Text><Text style={[s.value, isDark && { color: '#FFF' }]}>{tier}</Text></View>
-          <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Zap size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={s.label}>{t.messagesLeft}</Text><Text style={[s.value, isDark && { color: '#FFF' }]}>{usage.messages||0}</Text></View>
-          <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><MessageSquare size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={s.label}>{t.totalMessages}</Text><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.total_messages||0}</Text></View>
+          <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><Zap size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={s.label}>{t.messagesLeft}</Text><Text style={[s.value, isDark && { color: '#FFF' }]}>{usage.messages || 0}</Text></View>
+          <View style={[s.row, isDark && { borderBottomColor: '#444' }]}><MessageSquare size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={s.label}>{t.totalMessages}</Text><Text style={[s.value, isDark && { color: '#FFF' }]}>{profile.total_messages || 0}</Text></View>
         </View>
         <TouchableOpacity style={s.btn} onPress={()=>router.push('/subscription' as AppRoute)}><Crown size={16} stroke="#FFF" /><Text style={s.btnText}>{t.upgrade}</Text></TouchableOpacity>
         <TouchableOpacity style={[s.btn, s.outlineBtn]} onPress={handleLogout}><LogOut size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /><Text style={[s.btnText,{color: isDark ? '#D8B4FE' : '#6B21A8'}]}>{t.logout}</Text></TouchableOpacity>

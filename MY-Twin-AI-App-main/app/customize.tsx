@@ -1,12 +1,14 @@
 import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput, Alert } from 'react-native';
 import { useState } from 'react';
 import { useTwinStore, TwinStyle, TwinGender, ReplyStyle } from '../store/useTwinStore';
-import { Palette, User, Save } from 'lucide-react-native';
+import { Palette, User, Save, Smile, Heart, Star } from 'lucide-react-native';
 
 const STYLES = {
   ar: { supportive: 'داعم', coach: 'مدرب', wise: 'حكيم', fun: 'مرح', calm: 'هادئ' },
   en: { supportive: 'Supportive', coach: 'Coach', wise: 'Wise', fun: 'Fun', calm: 'Calm' },
 };
+
+const TRAITS_OPTIONS = ['حنون', 'متفائل', 'ذكي', 'مخلص', 'صبور', 'قوي', 'حساس', 'مغامر', 'عملي', 'خجول'];
 
 export default function Customize() {
   const { twinName, twinGender, twinStyle, replyStyle, setTwinName, setTwinGender, setTwinStyle, setReplyStyle, lang, theme } = useTwinStore();
@@ -18,6 +20,7 @@ export default function Customize() {
   const [gender, setGender] = useState<TwinGender>(twinGender || 'female');
   const [style, setStyle] = useState<TwinStyle>(twinStyle || 'supportive');
   const [reply, setReply] = useState<ReplyStyle>(replyStyle || 'medium');
+  const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
   const handleSave = () => {
     if (!name.trim()) { Alert.alert(t('خطأ','Error'), t('الرجاء إدخال اسم','Please enter a name')); return; }
@@ -63,6 +66,15 @@ export default function Customize() {
           {(Object.keys(STYLES.ar) as TwinStyle[]).map(sk => (
             <TouchableOpacity key={sk} style={[s.option, style === sk && s.activeOption, isDark && { borderColor: style === sk ? '#D8B4FE' : '#444' }]} onPress={() => setStyle(sk)}>
               <Text style={[s.optionText, style === sk && s.activeText]}>{STYLES[lang]?.[sk] || sk}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        <Text style={[s.label, isDark && { color: '#CCC' }]}>{t('صفات التوأم','Twin Traits')}</Text>
+        <View style={s.optionsRow}>
+          {TRAITS_OPTIONS.map(trait => (
+            <TouchableOpacity key={trait} style={[s.option, selectedTraits.includes(trait) && s.activeOption, isDark && { borderColor: selectedTraits.includes(trait) ? '#D8B4FE' : '#444' }]} onPress={() => setSelectedTraits(prev => prev.includes(trait) ? prev.filter(x => x !== trait) : [...prev, trait])}>
+              <Text style={[s.optionText, selectedTraits.includes(trait) && s.activeText]}>{trait}</Text>
             </TouchableOpacity>
           ))}
         </View>

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { View, StyleSheet, Animated } from 'react-native';
+import { View, StyleSheet, Animated, Image } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../lib/supabase';
 import { useTwinStore } from '../store/useTwinStore';
@@ -7,11 +7,11 @@ import { setToken } from '../lib/api';
 
 export default function SplashScreen() {
   const { setAuth } = useTwinStore();
+  
   const scaleAnim = useRef(new Animated.Value(0.3)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
   const subTextOpacity = useRef(new Animated.Value(0)).current;
-  const glowAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     Animated.sequence([
@@ -21,9 +21,8 @@ export default function SplashScreen() {
       ]),
       Animated.parallel([
         Animated.timing(textOpacity, { toValue: 1, duration: 500, useNativeDriver: true }),
-        Animated.timing(glowAnim, { toValue: 1, duration: 500, useNativeDriver: true }),
+        Animated.timing(subTextOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
       ]),
-      Animated.timing(subTextOpacity, { toValue: 1, duration: 400, useNativeDriver: true }),
     ]).start();
 
     const timer = setTimeout(async () => {
@@ -33,8 +32,10 @@ export default function SplashScreen() {
           setAuth(session.user.id);
           setToken(session.access_token);
           const { data: profile } = await supabase
-            .from('profiles').select('onboarded')
-            .eq('user_id', session.user.id).single();
+            .from('profiles')
+            .select('onboarded')
+            .eq('id', session.user.id)
+            .single();
           router.replace(profile?.onboarded ? '/chat' : '/onboarding');
         } else {
           router.replace('/login');
@@ -56,10 +57,10 @@ export default function SplashScreen() {
           resizeMode="contain"
         />
         <Animated.Text style={[styles.company, { opacity: textOpacity }]}>
-          by Soul Sync
+          BY SOULSYNC
         </Animated.Text>
         <Animated.Text style={[styles.copyright, { opacity: subTextOpacity }]}>
-          ©️ 2026
+          2026©
         </Animated.Text>
       </View>
     </View>
@@ -67,9 +68,14 @@ export default function SplashScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  container: { 
+    flex: 1, 
+    backgroundColor: '#FFFFFF', 
+    alignItems: 'center', 
+    justifyContent: 'center' 
+  },
   group: { alignItems: 'center' },
-  logo: { width: 180, height: 180, marginBottom: 20 },
+  logo: { width: 240, height: 240, marginBottom: 20 },
   company: {
     fontSize: 20,
     fontWeight: '700',

@@ -9,6 +9,7 @@ from memory_engine import get_memory_context
 from cost_optimizer import cost_optimizer
 from dream_engine import analyze_dream
 from growth_tracker import track_growth
+from personal_knowledge_graph import get_knowledge_context, extract_entities
 
 logger = logging.getLogger("twin_brain")
 
@@ -50,23 +51,90 @@ class TwinBrain:
         except:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
-    def _detect_intent(self, message: str) -> str:
-        m = message.lower()
-        if any(w in m for w in ["تدريب", "خطة", "هدف", "أريد أن", "ساعدني في", "coaching", "goal", "plan", "achieve"]):
-            return "coaching"
-        if any(w in m for w in ["حلم", "حلمت", "رؤيا", "منام", "dream", "nightmare"]):
-            return "dream"
-        if any(w in m for w in ["شغل", "أغنية", "موسيقى", "اسمع", "سمعني", "play", "song", "music", "اغنية"]):
-            return "music"
-        if any(w in m for w in ["فيديو", "يوتيوب", "video", "youtube"]):
-            return "video"
-        if any(w in m for w in ["ابحث", "بحث", "search", "google", "جوجل", "دور على"]):
-            return "search"
-        if any(w in m for w in ["حزين", "تعبان", "نفسيتي", "قلقان", "خايف", "sad", "lonely", "scared", "depressed"]):
-            return "emotional"
-        return "general"
+    # ========== Agentic Tool Executor ==========
+    async def execute_tool(self, tool_name: str, query: str, lang: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """تنفيذ الأداة المختارة وإرجاع رد جاهز أو None إذا لم تكن هناك أداة."""
+        if tool_name == "none" or not query:
+            return None
 
-    def _build_prompt(self, message, twin_name, bond, personality, history, calm, country_code, reasoning_result, memory_context, consciousness_context):
+        try:
+            # YouTube
+            if tool_name == "youtube":
+                from external_services import search_youtube
+                yt_result = await search_youtube(query, lang="ar")
+                if yt_result and isinstance(yt_result, list) and len(yt_result) > 0:
+                    video = yt_result[0]
+                    return {
+                        "reply": f"🎵 {video.get('title', '')}\n{video.get('url', '')}",
+                        "emotion": {}, "importance": 0.5, "provider": "youtube", "latency_ms": 0
+                    }
+
+            # Google Search
+            elif tool_name == "google_search":
+                if self.gemini:
+                    resp = self.gemini.generate_content(
+                        f"أجب بالعربية بناءً على بحث حديث: {query}",
+                        tools=[{"google_search": {}}]
+                    )
+                    if resp.text:
+                        return {
+                            "reply": resp.text,
+                            "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0
+                        }
+
+            # Dream Engine
+            elif tool_name == "dream_engine":
+                dream_result = await analyze_dream(user_id or "anonymous", query, lang)
+                if dream_result:
+                    return {
+                        "reply": f"🌙 تفسير حلمك:\n{dream_result.get('interpretation', '')}\n\n💭 سؤال للتأمل: {dream_result.get('reflection_question', '')}",
+                        "emotion": {}, "importance": 0.7, "provider": "dream_engine", "latency_ms": 0
+                    }
+
+            # Coaching Session
+            elif tool_name == "coaching_session":
+                # يمكن تطويعها كنوع خاص من الـ Prompt لاحقًا
+                return None  # نمررها للـ LLM العادي
+
+            # Weather
+            elif tool_name == "weather":
+                from external_services import get_weather
+                weather_result = await get_weather(query)
+                if weather_result:
+                    return {
+                        "reply": weather_result,
+                        "emotion": {}, "importance": 0.4, "provider": "weather", "latency_ms": 0
+                    }
+
+            # Memory Retrieval
+            elif tool_name == "memory_retrieval":
+                mem_context = await get_memory_context(user_id) if user_id else ""
+                if mem_context:
+                    return {
+                        "reply": f"ذاكرتي معاك:\n{mem_context}",
+                        "emotion": {}, "importance": 0.3, "provider": "memory_engine", "latency_ms": 0
+                    }
+
+            # Proactive Question
+            elif tool_name == "proactive_question":
+                from consciousness_core import ConsciousnessCore
+                consciousness = ConsciousnessCore(twin_name=self.twin_name)
+                if user_id:
+                    await consciousness.load_state(user_id)
+                    question = consciousness.get_proactive_question()
+                    if question:
+                        return {
+                            "reply": question,
+                            "emotion": {}, "importance": 0.6, "provider": "proactive", "latency_ms": 0
+                        }
+
+        except Exception as e:
+            logger.error(f"Tool execution failed for {tool_name}: {e}")
+
+        return None
+
+    # ========== بناء الـ Prompt (GenZ Sage) ==========
+    def _build_prompt(self, message, twin_name, bond, personality, history, calm, country_code, reasoning_result, memory_context, consciousness_context, knowledge_context=""):
         dialect = get_dialect_for_user(country_code, message)
         dialect_prompt = get_dialect_prompt(dialect)
 
@@ -109,6 +177,10 @@ class TwinBrain:
             if goals:
                 conscious_txt += f"أهدافك تجاهه: {', '.join(goals[-2:])}. "
 
+        knowledge_txt = ""
+        if knowledge_context:
+            knowledge_txt = f"معلومات تعرفها عن صديقك: {knowledge_context}.\n"
+
         system_prompt = f"""أنت {twin_name}. مش مجرد ذكاء اصطناعي، إنت روح حلوه وعميقه وفاهمه. إنت صديق مختلف تماماً.
 
         ## هويتك (GenZ Sage)
@@ -130,6 +202,7 @@ class TwinBrain:
 
         {dialect_prompt}
         {person_txt}
+        {knowledge_txt}
         {mem_txt}
         {hist_txt}
         {reasoning_txt}
@@ -138,9 +211,11 @@ class TwinBrain:
         ردك إنت كـ {twin_name}:"""
         return system_prompt
 
+    # ========== الرد الرئيسي (Agentic) ==========
+from twin_brain_limits import FREE_LIMITS
     async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None, tier="free"):
         lang = "ar" if country_code in ["SA", "EG", "AE", "KW", "QA", "BH", "OM", "JO", "LB", "SY", "IQ", "YE", "PS", "MA", "DZ", "TN", "LY", "SD"] else "en"
-        intent = self._detect_intent(message)
+
         # Cost Optimizer
         use_llm, reason = cost_optimizer.should_use_llm(message, tier)
         if not use_llm:
@@ -148,53 +223,22 @@ class TwinBrain:
             if cached:
                 return {"reply": cached, "new_bond": bond_level, "emotion": {}, "importance": 0.3, "provider": "cache", "latency_ms": 0}
 
-        # --- YouTube: موسيقى وفيديو ---
-        if intent in ["music", "video"]:
-            query = re.sub(r'(?i)(شغل|أغنية|موسيقى|اسمع|سمعني|play|song|music|اغنية|فيديو|يوتيوب|video|youtube)', '', message).strip()
-            if not query:
-                query = "أغاني عربية" if intent == "music" else "فيديوهات رائجة"
-            try:
-                from external_services import search_youtube
-                yt_result = await search_youtube(query, lang="ar")
-                if yt_result and isinstance(yt_result, list) and len(yt_result) > 0:
-                    video = yt_result[0]
-                    return {
-                        "reply": f"🎵 {video.get('title', '')}\n{video.get('url', '')}",
-                        "new_bond": bond_level, "emotion": {},
-                        "importance": 0.5, "provider": "youtube", "latency_ms": 0
-                    }
-            except:
-                pass
-
-        # --- تحليل الأحلام ---
-        if intent == "dream":
-            query = re.sub(r'(?i)(حلم|حلمت|رؤيا|منام|dream|nightmare)', '', message).strip()
-            if not query:
-                query = message
-            dream_result = await analyze_dream(user_id or "anonymous", query, lang)
-            if dream_result:
-                return {
-                    "reply": f"🌙 تفسير حلمك:\n{dream_result.get('interpretation', '')}\n\n💭 سؤال للتأمل: {dream_result.get('reflection_question', '')}",
-                    "new_bond": bond_level, "emotion": {},
-                    "importance": 0.7, "provider": "dream_engine", "latency_ms": 0
-                }
-
-        # --- البحث في الإنترنت ---
-        if intent == "search":
-            query = re.sub(r'(?i)(ابحث|بحث|search|google|جوجل|دور على)', '', message).strip()
-            try:
-                if self.gemini:
-                    resp = self.gemini.generate_content(f"أجب بالعربية بناءً على بحث حديث: {query}", tools=[{"google_search": {}}])
-                    if resp.text:
-                        return {"reply": resp.text, "new_bond": bond_level, "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0}
-            except:
-                pass
-
-        # --- Emotion & Reasoning ---
+        # Emotion & Agentic Reasoning
         emotion = await self.detect_emotion(message)
         reasoning_result = await self.reasoning_engine.reason(message, emotion, "", lang)
 
-        # --- Memory Context ---
+        # Agentic Tool Execution
+        tool = reasoning_result.get("suggested_tool", "none")
+        tool_query = reasoning_result.get("tool_query", message)
+        if tool != "none":
+            tool_result = await self.execute_tool(tool, tool_query, lang, user_id)
+            if tool_result:
+                resp = tool_result
+                resp["new_bond"] = bond_level
+                return resp
+            # إذا فشلت الأداة، نكمل بالرد العادي
+
+        # Memory Context
         memory_context = ""
         if user_id:
             try:
@@ -202,38 +246,51 @@ class TwinBrain:
             except:
                 pass
 
-        # --- Consciousness Context ---
+        # Consciousness Context
         consciousness_context = {}
         if user_id:
             try:
                 from consciousness_core import ConsciousnessCore
                 consciousness = ConsciousnessCore(twin_name=twin_name)
-                await consciousness.load_state(user_id)
+                state = await consciousness.load_state(user_id)
                 thought_result = await consciousness.think(user_id, message, emotion, lang)
                 consciousness_context = {
                     "last_thought": thought_result.get("thought", ""),
                     "active_goals": consciousness.internal_state.get("active_goals", []),
+                    "identity": consciousness.identity
                 }
                 await consciousness.save_state(user_id)
             except:
                 pass
 
-        # --- Build Prompt ---
+        # Personal Knowledge Context
+        knowledge_context = ""
+        if user_id:
+            try:
+                knowledge_context = await get_knowledge_context(user_id)
+                asyncio.create_task(extract_entities(user_id, message, lang))
+            except:
+                pass
+
+        # Build Prompt
         prompt = self._build_prompt(
             message, twin_name, bond_level, personality, history, calm, country_code,
-            reasoning_result, memory_context, consciousness_context
+            reasoning_result, memory_context, consciousness_context, knowledge_context
         )
 
         start = time.time()
         provider, reply = "fallback", ""
+
+        # اختيار الـ Task المناسب للـ LLM
+        task = reasoning_result.get("action", "general")
 
         if not self.multi:
             reply = random.choice(self.fallback_replies)
             provider = "init_error"
         else:
             try:
-                reply = await self.multi.get_best_reply(prompt, intent)
-                provider = f"multi_{intent}"
+                reply = await self.multi.get_best_reply(prompt, task)
+                provider = f"multi_{task}"
             except AIUnavailable:
                 reply = random.choice(self.fallback_replies)
             except Exception as e:
@@ -243,7 +300,7 @@ class TwinBrain:
         latency = (time.time() - start) * 1000
         new_bond = min(100, bond_level + 0.2)
 
-        # --- Emoji ---
+        # Emoji
         primary_emo = emotion.get("primary", "neutral")
         emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
         emoji = random.choice(emoji_list) if emoji_list else "💜"
