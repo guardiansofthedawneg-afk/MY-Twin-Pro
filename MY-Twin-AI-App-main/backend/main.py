@@ -54,7 +54,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # ---- Auth ----
-async def get_user(auth: str = Header(default=None)) -> Optional[str]:
+async def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
     token = auth[7:].strip()
