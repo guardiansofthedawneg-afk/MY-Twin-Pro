@@ -33,9 +33,9 @@ def get_referral_link(uid: str) -> str:
     code = generate_referral_code(uid)
     # تخزين الكود في الملف الشخصي إذا لم يكن موجودًا
     if db:
-        existing = db.table("profiles").select("referral_code").eq("user_id", uid).single().execute()
+        existing = db.table("profiles").select("referral_code").eq("id", uid).single().execute()
         if not existing.data or not existing.data.get("referral_code"):
-            db.table("profiles").update({"referral_code": code}).eq("user_id", uid).execute()
+            db.table("profiles").update({"referral_code": code}).eq("id", uid).execute()
     return f"{BASE_URL}/join?ref={code}"
 
 def activate_referral(uid: str, code: str) -> dict:
@@ -62,7 +62,7 @@ def activate_referral(uid: str, code: str) -> dict:
         return {"error": "own_code"}
     
     # التحقق من عدم استخدام هذا الكود مسبقًا من قبل هذا المستخدم
-    existing = db.table("referral_usage").select("*").eq("user_id", uid).eq("code", code).single().execute()
+    existing = db.table("referral_usage").select("*").eq("id", uid).eq("code", code).single().execute()
     if existing.data:
         return {"error": "already_used"}
     

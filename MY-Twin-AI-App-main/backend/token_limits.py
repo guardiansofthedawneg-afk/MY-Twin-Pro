@@ -65,7 +65,7 @@ def _get_referral_bonus(uid: str) -> int:
                 return total_bonus
             
             # أيضًا جلب المكافآت التي حصل عليها كمدعو
-            res2 = db.table("referral_usage").select("activated_at").eq("user_id", uid).execute()
+            res2 = db.table("referral_usage").select("activated_at").eq("id", uid).execute()
             if res2.data:
                 for row in res2.data:
                     activated = datetime.fromisoformat(row["activated_at"].replace("Z", "+00:00"))

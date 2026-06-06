@@ -119,7 +119,7 @@ async def get_profile(uid):
     k = f"p:{uid}"
     if c := cache_get(k): return c
     try:
-        r = await run_async(lambda: db.table("profiles").select("*").eq("user_id", uid).single().execute())
+        r = await run_async(lambda: db.table("profiles").select("*").eq("id", uid).single().execute())
         p = r.data or {}
         cache_set(k, p, 600)
         return p
@@ -130,7 +130,7 @@ async def get_profile(uid):
 async def get_usage(uid):
     t = date.today().isoformat()
     try:
-        r = await run_async(lambda: db.table("daily_usage").select("messages").eq("user_id", uid).eq("date", t).limit(1).execute())
+        r = await run_async(lambda: db.table("daily_usage").select("messages").eq("id", uid).eq("date", t).limit(1).execute())
         return r.data[0].get("messages", 0) if getattr(r, "data", None) else 0
     except Exception as exc:
         logger.warning(f"get_usage failed for {uid}: {exc}")
@@ -201,7 +201,7 @@ async def chat(
             logger.warning(f"fallback memory retrieval failed: {exc}")
     personality_data = None
     try:
-        pers = await run_async(lambda: db.table("personality_profiles").select("analyzed_traits").eq("user_id", uid).single().execute())
+        pers = await run_async(lambda: db.table("personality_profiles").select("analyzed_traits").eq("id", uid).single().execute())
         if pers.data: personality_data = pers.data.get("analyzed_traits")
     except Exception as exc:
         logger.debug(f"Personality lookup failed: {exc}")
@@ -277,7 +277,7 @@ async def chat(
 
 @app.delete("/api/account")
 async def del_acc(uid=Depends(get_user)):
-    await run_async(lambda: db.table("profiles").delete().eq("user_id", uid).execute())
+    await run_async(lambda: db.table("profiles").delete().eq("id", uid).execute())
     try: await run_async(lambda: db.auth.admin.delete_user(uid))
     except Exception as e: logger.warning(f"del user: {e}")
     return {"status":"deleted"}
@@ -319,12 +319,12 @@ async def create_reminder(body: ReminderReq, uid=Depends(get_user)):
 
 @app.get("/api/reminders")
 async def get_reminders(uid=Depends(get_user)):
-    r = await run_async(lambda: db.table("reminders").select("*").eq("user_id", uid).order("remind_at", asc=True).execute())
+    r = await run_async(lambda: db.table("reminders").select("*").eq("id", uid).order("remind_at", asc=True).execute())
     return r.data or []
 
 @app.delete("/api/reminders/{reminder_id}")
 async def delete_reminder(reminder_id: str, uid=Depends(get_user)):
-    await run_async(lambda: db.table("reminders").delete().eq("id", reminder_id).eq("user_id", uid).execute())
+    await run_async(lambda: db.table("reminders").delete().eq("id", reminder_id).eq("id", uid).execute())
     return {"status": "deleted"}
 
 @app.get("/api/calendar/events")
@@ -389,7 +389,7 @@ class ReferralCodeReq(BaseModel):
 async def generate_referral(uid=Depends(get_user)):
     from referral import generate_referral_code
     code = generate_referral_code(uid)
-    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("user_id", uid).execute())
+    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("id", uid).execute())
     return {"code": code}
 
 @app.post("/api/referral/activate")
