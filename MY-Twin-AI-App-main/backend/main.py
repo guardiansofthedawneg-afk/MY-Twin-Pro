@@ -21,6 +21,7 @@ from external_services import (
     get_news, get_location_info, get_knowledge
 )
 from telegram_webhook import router as telegram_router, setup_webhook
+from referral import generate_referral_code, activate_referral
 
 # ---- Configuration ----
 load_dotenv()
@@ -92,6 +93,9 @@ class ChatReq(BaseModel):
     dims: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
 
+class ReferralCodeReq(BaseModel):
+    code: str = Field(..., min_length=2, max_length=20)
+
 # ---- Core Chat Endpoint (SAFE & STABLE) ----
 @app.post("/api/chat")
 @limiter.limit("30/minute")
@@ -148,6 +152,25 @@ async def chat(
         "provider": res.get("provider", "unknown"),
         "latency_ms": res.get("latency_ms", 0)
     }
+
+# ---- Referral Endpoints ----
+@app.post("/api/referral/generate")
+async def generate_referral(uid: str = Depends(get_user)):
+    code = generate_referral_code(uid)
+    db.table("profiles").update({"referral_code": code}).eq("id", uid).execute()
+    return {"code": code}
+
+@app.post("/api/referral/activate")
+async def activate_referral_endpoint(body: ReferralCodeReq, uid: str = Depends(get_user)):
+    result = activate_referral(uid, body.code)
+    if result.get("success"):
+        inviter_id = result.get("inviter_id")
+        if inviter_id:
+            from token_limits import add_referral_bonus
+            add_referral_bonus(inviter_id, 500)
+            add_referral_bonus(uid, 500)
+        return {"success": True, "bonus": 500}
+    raise HTTPException(400, result.get("error", "invalid_code"))
 
 # ---- Other Endpoints ----
 @app.get("/")
