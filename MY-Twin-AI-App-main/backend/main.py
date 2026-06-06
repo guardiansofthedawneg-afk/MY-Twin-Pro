@@ -157,7 +157,10 @@ async def chat(
 @app.post("/api/referral/generate")
 async def generate_referral(uid: str = Depends(get_user)):
     code = generate_referral_code(uid)
-    db.table("profiles").update({"referral_code": code}).eq("id", uid).execute()
+    try:
+        db.table("profiles").update({"referral_code": code}).eq("id", uid).execute()
+    except:
+        pass
     return {"code": code}
 
 @app.post("/api/referral/activate")
