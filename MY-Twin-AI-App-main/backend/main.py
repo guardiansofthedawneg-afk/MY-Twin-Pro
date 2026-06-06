@@ -96,7 +96,8 @@ def get_profile(uid: str) -> dict:
 class ChatReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     twin_name: str = Field("توأمك")
-    bond_level: float = Field(0.0)    dims: dict = Field(default_factory=dict)
+    bond_level: float = Field(0.0)
+    dims: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
 
 # ---- Core Chat Endpoint ----
