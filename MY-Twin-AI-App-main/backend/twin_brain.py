@@ -9,14 +9,14 @@ logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
     EMOJI_MAP = {
-        "joy": ["😊", "😄", "", "✨", "🌟", "", "🎉", "💖"],
-        "sadness": ["💜", "", "🌧️", "💙", "🥺", "🤗", "🌸"],
-        "anger": ["😤", "💪", "🔥", "", "🧘", "🌿"],
-        "fear": ["🫶", "💜", "🤝", "", "️", "✨"],
-        "love": ["💕", "💗", "💝", "🥰", "💌", "", "💖", "🌸"],
-        "surprise": ["😮", "", "💡", "🎯", "🔮", "✨"],
-        "neutral": ["💜", "", "✨", "💭", "", "🌙"],
-        "support": ["💪", "🤝", "💜", "", "✨", "🌟"],
+        "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
+        "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
+        "anger": ["😤", "💪", "🔥", "⚡", "🧘", "🌿"],
+        "fear": ["🫶", "💜", "🤝", "🔒", "️", "✨"],
+        "love": ["💕", "💗", "💝", "🥰", "💌", "🫶", "💖", "🌸"],
+        "surprise": ["😮", "🤩", "💡", "🎯", "🔮", "✨"],
+        "neutral": ["💜", "🌸", "✨", "💭", "🤍", "🌙"],
+        "support": ["💪", "🤝", "💜", "🫶", "✨", "🌟"],
     }
 
     def __init__(self, gemini_key=None):
@@ -29,7 +29,6 @@ class TwinBrain:
             logger.error(f"❌ Gemini init failed: {e}")
             self.gemini = None
             
-        # ✅ FIX: Safe initialization of MultiAIClient
         try:
             self.multi = MultiAIClient()
             logger.info("✅ MultiAIClient initialized")
@@ -40,13 +39,12 @@ class TwinBrain:
         self.emotion_tracker = EmotionalStateTracker()
         self.fallback_replies = [
             "أنا هنا معك دائماً 💜",
-            "أتفهم ما تشعر به، أنا بجانبك ",
+            "أتفهم ما تشعر به، أنا بجانبك",
             "حدثني أكثر عن ذلك، أنا أستمع إليك 👂",
         ]
 
     def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            try:
             return self.emotion_tracker.analyze(text)
         except:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
@@ -97,7 +95,8 @@ class TwinBrain:
             "أنتما في بداية التعارف"
         )
         calm_note = "\nتحدث بهدوء ولطف شديد." if calm else ""
-        return (            f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
+        return (
+            f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
             f"{person_txt}\n{mem_txt}{hist_txt}\n"
             f"{dialect_prompt}\n"
             f"المستخدم: {message}\n"
@@ -117,7 +116,6 @@ class TwinBrain:
         provider = "fallback"
         reply = ""
         
-        # ✅ FIX: Diagnostic check before calling AI
         if not self.multi:
             reply = "عذراً، محرك الذكاء الاصطناعي غير مهيأ (Missing Keys?)"
             provider = "init_error"
@@ -131,11 +129,8 @@ class TwinBrain:
                 logger.warning("⚠️ All AI models unavailable")
                 reply = random.choice(self.fallback_replies)
             except Exception as e:
-                # ✅ FIX: Return the REAL error message instead of hiding it
                 logger.error(f"💥 Brain crash: {type(e).__name__}: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                reply = f"خطأ تقني: {str(e)[:150]}" 
+                reply = f"خطأ تقني: {str(e)[:150]}"
                 provider = "crash_log"
         
         latency = (time.time() - start) * 1000
@@ -144,8 +139,9 @@ class TwinBrain:
         primary_emo = emotion.get("primary", "neutral")
         emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
         emoji = random.choice(emoji_list) if emoji_list else "💜"
-        if reply and not any(e in reply for e in ["😊","💜","✨", "", ""]):
+        if reply and not any(e in reply for e in ["😊","💜","✨", "🌟", "🥺"]):
             reply = f"{reply} {emoji}"
+
         return {
             "reply": reply,
             "new_bond": min(100, bond_level + 0.2),
