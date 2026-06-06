@@ -1,4 +1,4 @@
-"""MyTwin API v8.3 — Fixed Sync Supabase Calls"""
+"""MyTwin API v8.4 — Fixed ALLOWED_ORIGINS & Auth"""
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -39,26 +39,39 @@ brain = TwinBrain(GEMINI_KEY)
 from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
+# ✅ FIX: Define ALLOWED_ORIGINS BEFORE using it in middleware
+ALLOWED_ORIGINS = [
+    "https://mytwin.app", 
+    "http://localhost:3000", 
+    "http://localhost:8000", 
+    "http://127.0.0.1:19006",
+    "exp://192.168.1.1:19000" # For Expo Go testing
+]
 # ---- FastAPI App ----
-app = FastAPI(title="MyTwin API", version="8.3.0")
+app = FastAPI(title="MyTwin API", version="8.4.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
 async def startup_event():
     await setup_webhook()
 
-# ---- CORS & Middleware ----ALLOWED_ORIGINS = ["https://mytwin.app", "http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:19006"]
-app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
+# ---- CORS & Middleware ----
+app.add_middleware(
+    CORSMiddleware, 
+    allow_origins=ALLOWED_ORIGINS, 
+    allow_methods=["*"], 
+    allow_headers=["*"], 
+    allow_credentials=True
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# ---- Auth (FIXED: Removed await from sync calls) ----
+# ---- Auth (Sync Supabase Calls) ----
 def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
     token = auth[7:].strip()
     try:
-        # ✅ FIX: Direct sync call without await
         user_resp = db.auth.get_user(token)
         if not user_resp.user or not user_resp.user.id:
             raise HTTPException(401, "unauthorized")
@@ -71,7 +84,6 @@ def get_profile(uid: str) -> dict:
     k = f"p:{uid}"
     if c := cache_get(k): return c
     try:
-        # ✅ FIX: Direct sync call without await
         r = db.table("profiles").select("*").eq("id", uid).single().execute()
         p = r.data or {}
         cache_set(k, p, 600)
@@ -84,8 +96,7 @@ def get_profile(uid: str) -> dict:
 class ChatReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     twin_name: str = Field("توأمك")
-    bond_level: float = Field(0.0)
-    dims: dict = Field(default_factory=dict)
+    bond_level: float = Field(0.0)    dims: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
 
 # ---- Core Chat Endpoint ----
@@ -96,17 +107,18 @@ async def chat(
     body: ChatReq,
     uid: str = Depends(get_user),
     calm: str = Header("false"),
-    x_country_code: str = Header("SA"),    x_twin_gender: str = Header("female")
+    x_country_code: str = Header("SA"),
+    x_twin_gender: str = Header("female")
 ):
     is_calm = calm.lower() == "true"
     country_code = x_country_code or "SA"
     twin_gender = x_twin_gender or "female"
 
     # 1. Get basic profile
-    p = get_profile(uid)  # ✅ Sync call
+    p = get_profile(uid)
     tier = p.get("tier", "free")
 
-    # 2. Call TwinBrain
+    # 2. Call TwinBrain with safety
     res = {}
     try:
         res = await brain.respond(
@@ -129,13 +141,11 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
-    # 3. Increment usage in background
+    # 3. Increment usage safely
     try:
-        # ✅ FIX: Run sync DB call in executor to avoid blocking
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
-    except Exception:
-        pass
+    except Exception:        pass
 
     # 4. Return response
     return {
@@ -146,14 +156,14 @@ async def chat(
         "provider": res.get("provider", "unknown"),
         "latency_ms": res.get("latency_ms", 0)
     }
-# ---- Other Endpoints (FIXED) ----
+
+# ---- Other Endpoints ----
 @app.get("/")
 async def root():
-    return {"status": "ok", "version": "8.3.0"}
+    return {"status": "ok", "version": "8.4.0"}
 
 @app.delete("/api/account")
 async def del_acc(uid: str = Depends(get_user)):
-    # ✅ FIX: Sync call
     db.table("profiles").delete().eq("id", uid).execute()
     return {"status": "deleted"}
 
@@ -174,4 +184,4 @@ async def weather_endpoint(city: str = "Cairo"):
 
 @app.get("/api/consciousness/state")
 async def get_consciousness(uid: str = Depends(get_user)):
-    return consciousness.get_consciousness_state();
+    return consciousness.get_consciousness_state()
