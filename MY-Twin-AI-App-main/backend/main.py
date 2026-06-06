@@ -1,4 +1,4 @@
-"""MyTwin API v8.2 — Final Stable Version"""
+"""MyTwin API v8.3 — Fixed Sync Supabase Calls"""
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -40,41 +40,44 @@ from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
 # ---- FastAPI App ----
-app = FastAPI(title="MyTwin API", version="8.2.0")
+app = FastAPI(title="MyTwin API", version="8.3.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
 async def startup_event():
     await setup_webhook()
 
-# ---- CORS & Middleware ----
-ALLOWED_ORIGINS = ["https://mytwin.app", "http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:19006"]
+# ---- CORS & Middleware ----ALLOWED_ORIGINS = ["https://mytwin.app", "http://localhost:3000", "http://localhost:8000", "http://127.0.0.1:19006"]
 app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# ---- Auth ----
-async def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
+# ---- Auth (FIXED: Removed await from sync calls) ----
+def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
     token = auth[7:].strip()
     try:
-        user_resp = await db.auth.get_user(token)
+        # ✅ FIX: Direct sync call without await
+        user_resp = db.auth.get_user(token)
         if not user_resp.user or not user_resp.user.id:
             raise HTTPException(401, "unauthorized")
         return user_resp.user.id
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Auth failed: {e}")
         raise HTTPException(401, "unauthorized")
 
-async def get_profile(uid: str) -> dict:
+def get_profile(uid: str) -> dict:
     k = f"p:{uid}"
     if c := cache_get(k): return c
     try:
-        r = await db.table("profiles").select("*").eq("id", uid).single().execute()
+        # ✅ FIX: Direct sync call without await
+        r = db.table("profiles").select("*").eq("id", uid).single().execute()
         p = r.data or {}
         cache_set(k, p, 600)
         return p
-    except Exception:
+    except Exception as e:
+        logger.error(f"Profile fetch failed: {e}")
         return {}
 
 # ---- Models ----
@@ -85,26 +88,25 @@ class ChatReq(BaseModel):
     dims: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
 
-# ---- Core Chat Endpoint (SAFE & STABLE) ----
+# ---- Core Chat Endpoint ----
 @app.post("/api/chat")
 @limiter.limit("30/minute")
 async def chat(
     request: Request,
     body: ChatReq,
-    uid=Depends(get_user),
+    uid: str = Depends(get_user),
     calm: str = Header("false"),
-    x_country_code: str = Header("SA"),
-    x_twin_gender: str = Header("female")
+    x_country_code: str = Header("SA"),    x_twin_gender: str = Header("female")
 ):
     is_calm = calm.lower() == "true"
     country_code = x_country_code or "SA"
     twin_gender = x_twin_gender or "female"
 
-    # ---- 1. Get basic profile ----
-    p = await get_profile(uid)
+    # 1. Get basic profile
+    p = get_profile(uid)  # ✅ Sync call
     tier = p.get("tier", "free")
 
-    # ---- 2. Call TwinBrain with full safety net ----
+    # 2. Call TwinBrain
     res = {}
     try:
         res = await brain.respond(
@@ -118,7 +120,6 @@ async def chat(
             personality=None,
             country_code=country_code
         )
-        # Ensure we have a valid dictionary
         if not isinstance(res, dict):
             logger.error(f"Brain returned non-dict: {type(res)}")
             res = {"reply": "حدث خطأ تقني مؤقت 💜", "provider": "error_handler"}
@@ -128,13 +129,15 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
-    # ---- 3. Increment usage in background (fire-and-forget) ----
+    # 3. Increment usage in background
     try:
-        asyncio.create_task(db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
+        # ✅ FIX: Run sync DB call in executor to avoid blocking
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
     except Exception:
         pass
 
-    # ---- 4. Return sanitized response ----
+    # 4. Return response
     return {
         "reply": res.get("reply", "..."),
         "new_bond": res.get("new_bond", 0),
@@ -143,15 +146,15 @@ async def chat(
         "provider": res.get("provider", "unknown"),
         "latency_ms": res.get("latency_ms", 0)
     }
-
-# ---- Other Endpoints ----
+# ---- Other Endpoints (FIXED) ----
 @app.get("/")
 async def root():
-    return {"status": "ok", "version": "8.2.0"}
+    return {"status": "ok", "version": "8.3.0"}
 
 @app.delete("/api/account")
-async def del_acc(uid=Depends(get_user)):
-    await db.table("profiles").delete().eq("id", uid).execute()
+async def del_acc(uid: str = Depends(get_user)):
+    # ✅ FIX: Sync call
+    db.table("profiles").delete().eq("id", uid).execute()
     return {"status": "deleted"}
 
 @app.get("/api/services/youtube")
@@ -170,5 +173,5 @@ async def weather_endpoint(city: str = "Cairo"):
     return {"result": result} if result else {"error": "unavailable"}
 
 @app.get("/api/consciousness/state")
-async def get_consciousness(uid=Depends(get_user)):
-    return consciousness.get_consciousness_state()
+async def get_consciousness(uid: str = Depends(get_user)):
+    return consciousness.get_consciousness_state();
