@@ -123,7 +123,7 @@ async def get_profile(uid):
     k = f"p:{uid}"
     if c := cache_get(k): return c
     try:
-        r = await run_async(lambda: db.table("profiles").select("*").eq("user_id", uid).single().execute())
+        r = await run_async(lambda: db.table("profiles").select("*").eq("id", uid).single().execute())
         p = r.data or {}
         cache_set(k, p, 600)
         return p
@@ -280,7 +280,7 @@ async def chat(
 
 @app.delete("/api/account")
 async def del_acc(uid=Depends(get_user)):
-    await run_async(lambda: db.table("profiles").delete().eq("user_id", uid).execute())
+    await run_async(lambda: db.table("profiles").delete().eq("id", uid).execute())
     try: await run_async(lambda: db.auth.admin.delete_user(uid))
     except Exception as e: logger.warning(f"del user: {e}")
     return {"status":"deleted"}
@@ -399,7 +399,7 @@ class ReferralCodeReq(BaseModel):
 async def generate_referral(uid=Depends(get_user)):
     from referral import generate_referral_code
     code = generate_referral_code(uid)
-    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("user_id", uid).execute())
+    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("id", uid).execute())
     return {"code": code}
 
 @app.post("/api/referral/activate")
