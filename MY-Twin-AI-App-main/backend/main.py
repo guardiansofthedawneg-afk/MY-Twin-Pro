@@ -1,4 +1,4 @@
-"""MyTwin API v8.5 — Final Stable & Safe Version"""
+"""MyTwin API v9.0 — Complete & Final"""
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -22,8 +22,11 @@ from external_services import (
 )
 from telegram_webhook import router as telegram_router, setup_webhook
 from referral import generate_referral_code, activate_referral
+from proactive_engine import proactive_engine
+from dream_engine import analyze_dream
+from growth_tracker import get_growth_history
+from latency_tracker import tracker
 
-# ---- Configuration ----
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mytwin")
@@ -31,6 +34,7 @@ logger = logging.getLogger("mytwin")
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
 GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+CRON_SECRET_KEY = os.getenv("CRON_SECRET_KEY", "")
 
 if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY]):
     raise RuntimeError("Missing required env vars")
@@ -40,7 +44,6 @@ brain = TwinBrain(GEMINI_KEY)
 from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
-# ---- FastAPI App ----
 ALLOWED_ORIGINS = [
     "https://mytwin.app",
     "http://localhost:3000",
@@ -48,7 +51,7 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:19006",
     "exp://192.168.1.1:19000"
 ]
-app = FastAPI(title="MyTwin API", version="8.5.0")
+app = FastAPI(title="MyTwin API", version="9.0.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
@@ -59,7 +62,6 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# ---- Auth (Sync Supabase Calls) ----
 def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
@@ -85,7 +87,6 @@ def get_profile(uid: str) -> dict:
         logger.error(f"Profile fetch failed: {e}")
         return {}
 
-# ---- Models ----
 class ChatReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     twin_name: str = Field("توأمك")
@@ -96,7 +97,7 @@ class ChatReq(BaseModel):
 class ReferralCodeReq(BaseModel):
     code: str = Field(..., min_length=2, max_length=20)
 
-# ---- Core Chat Endpoint (SAFE & STABLE) ----
+# ========== Chat ==========
 @app.post("/api/chat")
 @limiter.limit("30/minute")
 async def chat(
@@ -110,11 +111,9 @@ async def chat(
     is_calm = calm.lower() == "true"
     country_code = x_country_code or "SA"
     twin_gender = x_twin_gender or "female"
-
     p = get_profile(uid)
     tier = p.get("tier", "free")
 
-    # ---- Call TwinBrain with full safety net ----
     res = {}
     try:
         res = await brain.respond(
@@ -126,7 +125,9 @@ async def chat(
             history=body.history[-10:],
             calm=is_calm,
             personality=None,
-            country_code=country_code
+            country_code=country_code,
+            user_id=uid,
+            tier=tier
         )
         if not isinstance(res, dict):
             logger.error(f"Brain returned non-dict: {type(res)}")
@@ -137,11 +138,10 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
-    # ---- Increment usage safely (background) ----
     try:
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
-    except Exception:
+    except:
         pass
 
     return {
@@ -153,7 +153,7 @@ async def chat(
         "latency_ms": res.get("latency_ms", 0)
     }
 
-# ---- Referral Endpoints ----
+# ========== Referral ==========
 @app.post("/api/referral/generate")
 async def generate_referral(uid: str = Depends(get_user)):
     code = generate_referral_code(uid)
@@ -175,16 +175,26 @@ async def activate_referral_endpoint(body: ReferralCodeReq, uid: str = Depends(g
         return {"success": True, "bonus": 500}
     raise HTTPException(400, result.get("error", "invalid_code"))
 
-# ---- Other Endpoints ----
-@app.get("/")
-async def root():
-    return {"status": "ok", "version": "8.5.0"}
+# ========== Cron Proactive ==========
+@app.post("/cron/proactive")
+async def cron_proactive(req: Request):
+    key = req.headers.get("X-Cron-Key", "")
+    if not CRON_SECRET_KEY or key != CRON_SECRET_KEY:
+        raise HTTPException(401, "unauthorized")
+    result = await proactive_engine.run_cron_job()
+    return result
 
-@app.delete("/api/account")
-async def del_acc(uid: str = Depends(get_user)):
-    db.table("profiles").delete().eq("id", uid).execute()
-    return {"status": "deleted"}
+# ========== Dream & Growth ==========
+@app.post("/api/dream/analyze")
+async def analyze_dream_endpoint(body: dict, uid: str = Depends(get_user)):
+    result = await analyze_dream(uid, body.get("dream", ""), body.get("lang", "ar"))
+    return result
 
+@app.get("/api/growth/history")
+async def growth_history(uid: str = Depends(get_user)):
+    return await get_growth_history(uid)
+
+# ========== Services ==========
 @app.get("/api/services/youtube")
 async def youtube_endpoint(query: str, lang: str = "ar"):
     result = await search_youtube(query, lang=lang)
@@ -199,6 +209,16 @@ async def spotify_endpoint(query: str):
 async def weather_endpoint(city: str = "Cairo"):
     result = await get_weather(city)
     return {"result": result} if result else {"error": "unavailable"}
+
+# ========== Misc ==========
+@app.get("/")
+async def root():
+    return {"status": "ok", "version": "9.0.0"}
+
+@app.delete("/api/account")
+async def del_acc(uid: str = Depends(get_user)):
+    db.table("profiles").delete().eq("id", uid).execute()
+    return {"status": "deleted"}
 
 @app.get("/api/consciousness/state")
 async def get_consciousness(uid: str = Depends(get_user)):

@@ -6,6 +6,9 @@ from emotional_engine import EmotionalStateTracker
 from dialect_engine import get_dialect_for_user, get_dialect_prompt
 from reasoning_engine import ReasoningEngine
 from memory_engine import get_memory_context
+from cost_optimizer import cost_optimizer
+from dream_engine import analyze_dream
+from growth_tracker import track_growth
 
 logger = logging.getLogger("twin_brain")
 
@@ -89,17 +92,14 @@ class TwinBrain:
 
         calm_note = "إهدى شوية وخلي كلامك رايق." if calm else ""
 
-        # --- دمج نتائج Reasoning Engine ---
         reasoning_txt = ""
         if reasoning_result:
             reasoning_txt = f"خطتك: {reasoning_result.get('plan', '')}. أسلوبك: {reasoning_result.get('response_style', 'warm')}."
 
-        # --- دمج الذاكرة المحسنة (Memory Graph) ---
         if not memory_context:
             memory_context = "لا توجد ذكريات سابقة."
         mem_txt = f"ذاكرتك المشتركة: {memory_context}"
 
-        # --- دمج أفكار وأهداف الوعي (Consciousness) ---
         conscious_txt = ""
         if consciousness_context:
             thought = consciousness_context.get("last_thought", "")
@@ -138,8 +138,15 @@ class TwinBrain:
         ردك إنت كـ {twin_name}:"""
         return system_prompt
 
-    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None):
+    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None, tier="free"):
+        lang = "ar" if country_code in ["SA", "EG", "AE", "KW", "QA", "BH", "OM", "JO", "LB", "SY", "IQ", "YE", "PS", "MA", "DZ", "TN", "LY", "SD"] else "en"
         intent = self._detect_intent(message)
+        # Cost Optimizer
+        use_llm, reason = cost_optimizer.should_use_llm(message, tier)
+        if not use_llm:
+            cached = cost_optimizer.get_cached_response(message)
+            if cached:
+                return {"reply": cached, "new_bond": bond_level, "emotion": {}, "importance": 0.3, "provider": "cache", "latency_ms": 0}
 
         # --- YouTube: موسيقى وفيديو ---
         if intent in ["music", "video"]:
@@ -159,6 +166,19 @@ class TwinBrain:
             except:
                 pass
 
+        # --- تحليل الأحلام ---
+        if intent == "dream":
+            query = re.sub(r'(?i)(حلم|حلمت|رؤيا|منام|dream|nightmare)', '', message).strip()
+            if not query:
+                query = message
+            dream_result = await analyze_dream(user_id or "anonymous", query, lang)
+            if dream_result:
+                return {
+                    "reply": f"🌙 تفسير حلمك:\n{dream_result.get('interpretation', '')}\n\n💭 سؤال للتأمل: {dream_result.get('reflection_question', '')}",
+                    "new_bond": bond_level, "emotion": {},
+                    "importance": 0.7, "provider": "dream_engine", "latency_ms": 0
+                }
+
         # --- البحث في الإنترنت ---
         if intent == "search":
             query = re.sub(r'(?i)(ابحث|بحث|search|google|جوجل|دور على)', '', message).strip()
@@ -170,11 +190,11 @@ class TwinBrain:
             except:
                 pass
 
-        # --- Emotion & Reasoning (الجديد) ---
+        # --- Emotion & Reasoning ---
         emotion = await self.detect_emotion(message)
         reasoning_result = await self.reasoning_engine.reason(message, emotion, "", lang)
 
-        # --- Memory Context (الجديد) ---
+        # --- Memory Context ---
         memory_context = ""
         if user_id:
             try:
@@ -182,7 +202,7 @@ class TwinBrain:
             except:
                 pass
 
-        # --- Consciousness Context (الجديد) ---
+        # --- Consciousness Context ---
         consciousness_context = {}
         if user_id:
             try:
@@ -198,7 +218,7 @@ class TwinBrain:
             except:
                 pass
 
-        # --- بناء الـ Prompt مع جميع السياقات ---
+        # --- Build Prompt ---
         prompt = self._build_prompt(
             message, twin_name, bond_level, personality, history, calm, country_code,
             reasoning_result, memory_context, consciousness_context
@@ -223,7 +243,7 @@ class TwinBrain:
         latency = (time.time() - start) * 1000
         new_bond = min(100, bond_level + 0.2)
 
-        # --- إضافة الإيموجي ---
+        # --- Emoji ---
         primary_emo = emotion.get("primary", "neutral")
         emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
         emoji = random.choice(emoji_list) if emoji_list else "💜"

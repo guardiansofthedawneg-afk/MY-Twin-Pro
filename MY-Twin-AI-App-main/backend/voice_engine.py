@@ -84,6 +84,8 @@ async def _edge_tts(
         lang_map = VOICES.get(voice_code) or VOICES.get("ar-SA")
         voice_name = lang_map[gender]
         config = EMOTION_PARAMS.get(emotion, EMOTION_PARAMS['neutral'])
+        if personality:
+            config = {**config, **personality}
         communicate = edge_tts.Communicate(
             clean, voice_name,
             rate=config['rate'], pitch=config['pitch']

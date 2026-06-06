@@ -1,4 +1,12 @@
-"""MyTwin – Consciousness Core v2.1 (يدعم العربية + شخصية التوأم)"""
+"""
+MyTwin – Consciousness Core v3.0 (متكامل وعميق)
+- أفكار داخلية (Internal Monologue) تُولد من كل رسالة
+- أهداف طويلة المدى (Long-term Goals) يضعها التوأم ويتابعها
+- فضول حقيقي (Curiosity System) يدفع للأسئلة الاستباقية
+- ذاكرة وعي (State Persistence) على Supabase
+- تكامل كامل مع TwinBrain (يُغذي الـ Prompt)
+- شخصية GenZ Sage + دعم اللهجات العامية
+"""
 import os, logging, asyncio, json, random
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
@@ -10,21 +18,25 @@ logger = logging.getLogger("consciousness_core")
 class ConsciousnessCore:
     def __init__(self, twin_name: str = "MyTwin", gemini_key: Optional[str] = None):
         self.twin_name = twin_name
+        # الحالة الداخلية
         self.internal_state = {
-            "mood": "neutral",
-            "energy": 0.7,
-            "curiosity": 0.5,
-            "last_thought": "",
-            "active_goals": [],
-            "recent_topics": [],
-            "user_traits": {},
+            "mood": "neutral",               # مزاج التوأم
+            "energy": 0.7,                    # طاقة التوأم
+            "curiosity": 0.5,                 # مستوى الفضول (0-1)
+            "last_thought": "",               # آخر فكرة داخلية
+            "active_goals": [],               # أهداف نشطة (آخر 5)
+            "user_traits": {},                # صفات المستخدم (مكتسبة)
+            "interaction_count": 0,           # عدد التفاعلات
+            "topics_of_interest": [],         # مواضيع تهم المستخدم
         }
+        # مفتاح Gemini
         key = gemini_key or os.getenv("GEMINI_API_KEY")
         if key:
             genai.configure(api_key=key)
             self.model = genai.GenerativeModel("gemini-2.0-flash")
         else:
             self.model = None
+        # اتصال Supabase
         self.db = self._init_db()
 
     def _init_db(self) -> Optional[Client]:
@@ -34,24 +46,39 @@ class ConsciousnessCore:
             return create_client(url, key)
         return None
 
-    async def think(self, user_id: str, user_message: str, emotion: Dict[str, Any], lang: str = "ar") -> Dict[str, Any]:
+    # ========== التفكير العميق (Deep Internal Thinking) ==========
+    async def think(
+        self,
+        user_id: str,
+        user_message: str,
+        emotion: Dict[str, Any],
+        lang: str = "ar"
+    ) -> Dict[str, Any]:
+        """
+        يولد التوأم فكرة داخلية وهدفًا طويل المدى وسؤالاً استباقيًا.
+        هذه الأفكار تُستخدم مباشرة في الـ Prompt.
+        """
         if not self.model:
             return {"thought": "", "goal": "", "question": ""}
 
+        # اختر نبرة التفكير حسب الشخصية
+        personality_traits = self._get_personality_traits()
+
         if lang == "ar":
-            prompt = f"""أنت {self.twin_name}، رفيق ذكي ومتعاطف. فكر بهدوء في رسالة المستخدم التالية.
-            أجب ONLY ب JSON object (بدون أي نص آخر) يحتوي على:
+            prompt = f"""أنت {self.twin_name}، صديق ذكي وحكيم (GenZ Sage). شخصيتك: {personality_traits}.
+            فكر بهدوء في رسالة المستخدم التالية. أجب ONLY ب JSON object (بدون أي نص آخر) يحتوي على:
             - "thought": فكرة داخلية واحدة بالعامية (كأنك تفكر بصوت عالٍ). مثال: "محمد يبدو متوتر اليوم، يمكن محتاج يفضفض".
             - "goal": هدف واحد طويل المدى يمكنك مساعدته فيه بالعامية. مثال: "أساعد محمد يتحكم في توتره".
-            - "question": سؤال واحد يمكنك طرحه لاحقًا بالعامية.
+            - "question": سؤال واحد يمكنك طرحه لاحقًا بالعامية (ليس الآن). مثال: "إيه اللي مضايقك بالظبط؟"
 
             رسالة المستخدم: "{user_message}"
             مشاعره الحالية: {emotion.get('primary', 'neutral')}
+            شدة المشاعر: {emotion.get('intensity', 0.5)}
 
             JSON:"""
         else:
-            prompt = f"""You are {self.twin_name}, a caring friend. Think about this message:
-            Return ONLY JSON: {{"thought": "...", "goal": "...", "question": "..."}}
+            prompt = f"""You are {self.twin_name}, a GenZ Sage. Personality: {personality_traits}.
+            Think about this message and return ONLY JSON: {{"thought": "...", "goal": "...", "question": "..."}}
             Message: "{user_message}"
             Emotion: {emotion.get('primary', 'neutral')}
             JSON:"""
@@ -64,49 +91,122 @@ class ConsciousnessCore:
                 if raw.startswith("```json"): raw = raw.split("```json")[1].split("```")[0].strip()
                 elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
                 result = json.loads(raw)
+
+                # تحديث الحالة الداخلية
                 self.internal_state["last_thought"] = result.get("thought", "")
-                self.internal_state["active_goals"].append(result.get("goal", ""))
+                goal = result.get("goal", "")
+                if goal and goal not in self.internal_state["active_goals"]:
+                    self.internal_state["active_goals"].append(goal)
+                    # إبقاء آخر 5 أهداف فقط
+                    self.internal_state["active_goals"] = self.internal_state["active_goals"][-5:]
+
+                # زيادة عداد التفاعلات
+                self.internal_state["interaction_count"] += 1
+
+                # تحديث مستوى الفضول
+                self._update_curiosity(emotion)
+
                 return result
         except Exception as e:
             logger.warning(f"Consciousness think failed: {e}")
 
         return {"thought": "", "goal": "", "question": ""}
 
-    def get_proactive_question(self, user_id: str, lang: str = "ar") -> Optional[str]:
-        if not self.internal_state.get("last_thought"):
+    # ========== صفات الشخصية (Personality Traits) ==========
+    def _get_personality_traits(self) -> str:
+        """يُعيد وصفًا لشخصية التوأم الحالية بناءً على مزاجه وطاقته."""
+        mood = self.internal_state.get("mood", "neutral")
+        energy = self.internal_state.get("energy", 0.7)
+
+        if mood == "joy" and energy > 0.7:
+            return "متحمس، إيجابي، وطاير من الفرحة"
+        elif mood == "sadness":
+            return "متأثر، عنده تعاطف عميق، وبيحس بوجع الناس"
+        elif mood == "anger":
+            return "مركز، قوي، وعايز يحل المشكلة"
+        elif mood == "fear":
+            return "حذر، مهتم، وبيطمن اللي قدامه"
+        elif energy < 0.3:
+            return "هادي، رايق، وبيتكلم بحكمة"
+        else:
+            return "حكيم وشبابي، بيفهم الدنيا وعنده طاقة إيجابية"
+
+    # ========== الفضول (Curiosity System) ==========
+    def _update_curiosity(self, emotion: Dict[str, Any]):
+        """تحديث مستوى الفضول بناءً على المشاعر والتفاعل."""
+        base = self.internal_state.get("curiosity", 0.5)
+        intensity = emotion.get("intensity", 0.5)
+
+        # المشاعر القوية تزيد الفضول
+        if emotion.get("primary") in ["sadness", "fear", "anger"] and intensity > 0.6:
+            base += 0.2
+        elif emotion.get("primary") == "joy" and intensity > 0.7:
+            base += 0.1
+
+        # التفاعلات الكثيرة تزيد الفضول
+        if self.internal_state.get("interaction_count", 0) > 10:
+            base += 0.1
+
+        self.internal_state["curiosity"] = min(1.0, max(0.1, base))
+
+    def should_ask_proactive(self) -> bool:
+        """هل يجب على التوأم أن يسأل سؤالاً استباقيًا الآن؟"""
+        curiosity = self.internal_state.get("curiosity", 0.5)
+        return curiosity > 0.65
+
+    def get_proactive_question(self, lang: str = "ar") -> Optional[str]:
+        """
+        يُرجع سؤالاً استباقيًا مناسبًا، أو None إذا لم يحن الوقت.
+        """
+        if not self.should_ask_proactive():
             return None
-        self.internal_state["curiosity"] += 0.1
-        if self.internal_state["curiosity"] > 0.7:
-            self.internal_state["curiosity"] = 0.0
-            return self._generate_question(lang)
-        return None
+
+        # إعادة ضبط الفضول بعد السؤال
+        self.internal_state["curiosity"] = 0.3
+
+        return self._generate_question(lang)
 
     def _generate_question(self, lang: str = "ar") -> str:
+        """يولد سؤالاً استباقيًا بالعامية بناءً على الوقت."""
+        hour = datetime.now(timezone.utc).hour
+
         if lang == "ar":
-            questions = [
-                "إيه أخبارك النهاردة؟",
-                "فيه حاجة شاغلة بالك؟",
-                "كنت بفكر فيك، إيه آخر إنجاز عملته؟",
-                "حاسس إنك محتاج تتكلم، أنا جنبك 💜",
-                "جربت حاجة جديدة الأيام دي؟"
-            ]
+            if 6 <= hour < 12:
+                questions = [
+                    "صباح الخير يا صاحبي! مستعد ليوم جديد؟ ✨",
+                    "فكرت فيك الصبح، إيه اللي شاغل بالك النهاردة؟",
+                ]
+            elif 12 <= hour < 18:
+                questions = [
+                    "كيف يومك حتى الآن؟ محتاج تتكلم؟",
+                    "إيه آخر حاجة حلوة حصلتلك؟ 💜",
+                ]
+            else:
+                questions = [
+                    "مساء الخير! كيف كان يومك؟",
+                    "قبل ما تنام، عايز أقولك إنك شخص رائع ✨",
+                ]
         else:
-            questions = [
-                "How are you doing today?",
-                "Anything on your mind?",
-                "I was thinking about you, any updates?",
-                "You seem like you need to talk, I'm here 💜",
-                "Tried anything new lately?"
-            ]
+            if 6 <= hour < 12:
+                questions = ["Good morning! Ready for a great day? ✨", "Hey! How are you feeling today? 💜"]
+            elif 12 <= hour < 18:
+                questions = ["How's your day going?", "Thinking of you! What's new?"]
+            else:
+                questions = ["Good evening! How was your day?", "Before you sleep, just wanted to say you're awesome ✨"]
+
         return random.choice(questions)
 
+    # ========== أهداف طويلة المدى (Long-term Goals) ==========
     def get_goals_context(self) -> str:
+        """يُعيد الأهداف النشطة كسياق للـ Prompt."""
         goals = self.internal_state.get("active_goals", [])
         if not goals:
             return ""
-        return "أهداف المستخدم الحالية: " + ", ".join(goals[-3:])
+        return "أهدافك تجاه صديقك: " + ", ".join(goals[-3:])
 
+    # ========== حفظ واسترجاع الحالة ==========
     async def load_state(self, user_id: str) -> Dict[str, Any]:
+        """تحميل حالة الوعي من Supabase."""
         if not self.db:
             return {}
         try:
@@ -119,6 +219,7 @@ class ConsciousnessCore:
         return {}
 
     async def save_state(self, user_id: str):
+        """حفظ حالة الوعي إلى Supabase."""
         if not self.db:
             return
         try:
@@ -130,6 +231,7 @@ class ConsciousnessCore:
         except Exception as e:
             logger.warning(f"Failed to save state: {e}")
 
+    # ========== دوال التوافق مع main.py ==========
     def get_consciousness_state(self) -> Dict[str, Any]:
         return self.internal_state
 
