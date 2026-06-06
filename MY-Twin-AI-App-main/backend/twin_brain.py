@@ -9,22 +9,34 @@ logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
     EMOJI_MAP = {
-        "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
-        "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
-        "anger": ["😤", "💪", "🔥", "⚡", "🧘", "🌿"],
-        "fear": ["🫶", "💜", "🤝", "🔒", "️", "✨"],
+        "joy": ["😊", "😄", "", "✨", "🌟", "", "🎉", "💖"],
+        "sadness": ["💜", "", "🌧️", "💙", "🥺", "🤗", "🌸"],
+        "anger": ["😤", "💪", "🔥", "", "🧘", "🌿"],
+        "fear": ["🫶", "💜", "🤝", "", "️", "✨"],
         "love": ["💕", "💗", "💝", "🥰", "💌", "", "💖", "🌸"],
         "surprise": ["😮", "", "💡", "🎯", "🔮", "✨"],
-        "neutral": ["💜", "🌸", "✨", "💭", "🤍", "🌙"],
+        "neutral": ["💜", "", "✨", "💭", "", "🌙"],
         "support": ["💪", "🤝", "💜", "", "✨", "🌟"],
     }
 
     def __init__(self, gemini_key=None):
         key = gemini_key or os.getenv("GEMINI_API_KEY")
-        genai.configure(api_key=key)
-        self.gemini = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ إعادة تفعيل MultiAIClient
-        self.multi = MultiAIClient()
+        try:
+            genai.configure(api_key=key)
+            self.gemini = genai.GenerativeModel("gemini-2.0-flash")
+            logger.info("✅ Gemini model initialized")
+        except Exception as e:
+            logger.error(f"❌ Gemini init failed: {e}")
+            self.gemini = None
+            
+        # ✅ FIX: Safe initialization of MultiAIClient
+        try:
+            self.multi = MultiAIClient()
+            logger.info("✅ MultiAIClient initialized")
+        except Exception as e:
+            logger.error(f"❌ MultiAIClient init failed: {e}")
+            self.multi = None
+            
         self.emotion_tracker = EmotionalStateTracker()
         self.fallback_replies = [
             "أنا هنا معك دائماً 💜",
@@ -34,8 +46,7 @@ class TwinBrain:
 
     def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            return self.emotion_tracker.analyze(text)
-        except:
+            return self.emotion_tracker.analyze(text)        except:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
     def _detect_task(self, message: str) -> str:
@@ -84,8 +95,7 @@ class TwinBrain:
             "أنتما في بداية التعارف"
         )
         calm_note = "\nتحدث بهدوء ولطف شديد." if calm else ""
-        return (
-            f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
+        return (            f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
             f"{person_txt}\n{mem_txt}{hist_txt}\n"
             f"{dialect_prompt}\n"
             f"المستخدم: {message}\n"
@@ -103,15 +113,28 @@ class TwinBrain:
         
         start = time.time()
         provider = "fallback"
-        try:
-            # ✅ استخدام MultiAIClient مع توزيع المهام
-            reply = await self.multi.get_best_reply(prompt, task)
-            provider = f"multi_{task}"
-        except AIUnavailable:
-            reply = random.choice(self.fallback_replies)
-        except Exception as e:
-            logger.error(f"Brain error: {e}")
-            reply = random.choice(self.fallback_replies)
+        reply = ""
+        
+        # ✅ FIX: Diagnostic check before calling AI
+        if not self.multi:
+            reply = "عذراً، محرك الذكاء الاصطناعي غير مهيأ (Missing Keys?)"
+            provider = "init_error"
+        else:
+            try:
+                logger.info(f"🧠 Calling MultiAI for task: {task}")
+                reply = await self.multi.get_best_reply(prompt, task)
+                provider = f"multi_{task}"
+                logger.info(f"✅ AI replied via {provider}")
+            except AIUnavailable:
+                logger.warning("⚠️ All AI models unavailable")
+                reply = random.choice(self.fallback_replies)
+            except Exception as e:
+                # ✅ FIX: Return the REAL error message instead of hiding it
+                logger.error(f"💥 Brain crash: {type(e).__name__}: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                reply = f"خطأ تقني: {str(e)[:150]}" 
+                provider = "crash_log"
         
         latency = (time.time() - start) * 1000
         
@@ -119,9 +142,8 @@ class TwinBrain:
         primary_emo = emotion.get("primary", "neutral")
         emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
         emoji = random.choice(emoji_list) if emoji_list else "💜"
-        if reply and not any(e in reply for e in ["😊","💜","✨", "", "🤗"]):
+        if reply and not any(e in reply for e in ["😊","💜","✨", "", ""]):
             reply = f"{reply} {emoji}"
-
         return {
             "reply": reply,
             "new_bond": min(100, bond_level + 0.2),
