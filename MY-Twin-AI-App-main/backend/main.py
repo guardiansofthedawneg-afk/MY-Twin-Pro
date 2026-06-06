@@ -1,4 +1,4 @@
-"""MyTwin API v7.0 — Production Ready"""
+"""MyTwin API v8.0 — All Features Enabled + Latency Tracker"""
 import os, asyncio, logging, hmac, hashlib, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -17,6 +17,18 @@ from emotional_engine import calc_energy, tts_params, get_voice_emotion
 from time import time
 from monitoring import AIMonitor
 from multi_ai import AIUnavailable
+from latency_tracker import tracker  # ✅ تتبع زمن الاستجابة
+
+# ========== الخدمات الخارجية ==========
+from external_services import (
+    search_youtube, search_spotify, get_weather,
+    get_todoist_tasks, get_calendar_events,
+    get_news, get_location_info, get_knowledge
+)
+
+# ========== تيليجرام Webhook ==========
+from telegram_webhook import router as telegram_router, setup_webhook
+
 try:
     from product_recommender import extract_purchase_intent, get_recommended_product, format_product_suggestion, log_product_impression
     HAS_PRODUCT_RECOMMENDER = True
@@ -58,7 +70,14 @@ brain = TwinBrain(GEMINI_KEY)
 from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
-app = FastAPI(title="MyTwin API", version="7.0.0")
+app = FastAPI(title="MyTwin API", version="8.0.0")
+
+# ========== تيليجرام Webhook ==========
+app.include_router(telegram_router)
+
+@app.on_event("startup")
+async def startup_event():
+    await setup_webhook()
 
 # ─── Monitoring Middleware ─────────────────────────────────────
 @app.middleware("http")
@@ -129,9 +148,9 @@ class ChatReq(BaseModel):
     history: list = Field(default_factory=list)
 
 @app.get("/")
-async def root(): return {"status":"ok","version":"7.0.0"}
+async def root(): return {"status":"ok","version":"8.0.0"}
 @app.get("/health")
-async def health(): return {"status":"ok","version":"7.0.0"}
+async def health(): return {"status":"ok","version":"8.0.0"}
 
 @app.post("/api/chat")
 @limiter.limit("30/minute")
@@ -160,17 +179,23 @@ async def chat(
         rem = lim - used - est
     emo_filter = None
     emo = {"needs_support": False}
+
+    # ✅ تتبع زمن اكتشاف المشاعر
+    tracker.start("emotion_detection")
     try:
         emo = brain.detect_emotion(body.message)
         if emo.get("needs_support"): emo_filter = "sadness"
     except Exception as exc:
         logger.warning(f"emotion detection failed: {exc}")
+    finally:
+        tracker.end()
+
     mems = []
     try:
         from memory_engine import DeepMemorySystem
         mems = DeepMemorySystem().retrieve(uid, body.message, days=7, lim=5, emotion_filter=emo_filter)
     except ImportError:
-        logger.debug("DeepMemorySystem unavailable, falling back to get_mems")
+        logger.debug("DeepMemorySystem unavailable")
     except Exception as exc:
         logger.warning(f"memory retrieval failed: {exc}")
     if not mems:
@@ -185,12 +210,16 @@ async def chat(
         if pers.data: personality_data = pers.data.get("analyzed_traits")
     except Exception as exc:
         logger.debug(f"Personality lookup failed: {exc}")
+
+    # ✅ تتبع زمن استجابة الدماغ
+    tracker.start("brain_response")
     try:
         res = await run_async(lambda: brain.respond(
             message=body.message, twin_name=body.twin_name, bond_level=body.bond_level,
             dims=body.dims, memories=mems, history=body.history[-10:], calm=is_calm,
             personality=personality_data, country_code=country_code
         ))
+        tracker.end()
         AIMonitor.log(
             db=db, uid=uid, provider=res.get("provider"),
             task=res.get("task", "general"), latency=res.get("latency_ms", 0),
@@ -224,13 +253,9 @@ async def chat(
             logger.warning(f"memory store task failed: {exc}")
     
     energy = calc_energy(p.get("last_active",""), p.get("daily_msgs",0), res.get("emotion",{}).get("primary","neutral"))
-    
-    # ✅ تكامل الصوت: إعدادات TTS حسب المشاعر والباقة والجنس
     emotion_data = res.get("emotion", {})
     voice_emotion = get_voice_emotion(emotion_data)
     voice = tts_params(emotion_data.get("primary", "neutral"), is_calm)
-    
-    # ✅ إضافة dialect code للصوت
     from dialect_engine import get_voice_dialect
     voice_dialect = get_voice_dialect(country_code)
     
@@ -245,7 +270,8 @@ async def chat(
         "tts_emotion": voice_emotion,
         "tts_dialect": voice_dialect,
         "tokens_left": rem,
-        "provider": res.get("provider","gemini_flash")
+        "provider": res.get("provider","gemini_flash"),
+        "latency_breakdown": tracker.get_breakdown(),  # ✅ تقرير زمن الاستجابة
     }
     if "dream_data" in res: resp["dream"] = res["dream_data"]
     if "coaching_data" in res: resp["coaching"] = res["coaching_data"]
@@ -320,29 +346,52 @@ async def get_device_status(entity_id: str, uid=Depends(get_user)):
     state = sh.get_device_state(entity_id)
     return state or {"status": "unavailable"}
 
-@app.get("/api/services/weather")
-async def weather_endpoint(city: str = "Cairo", lat: Optional[float] = None, lon: Optional[float] = None):
-    from external_services import get_weather
-    result = get_weather(city, lat, lon)
+# ========== YouTube ==========
+@app.get("/api/services/youtube")
+async def youtube_endpoint(query: str, lang: str = "ar"):
+    result = await search_youtube(query, lang=lang)
     return {"result": result} if result else {"error": "unavailable"}
 
+# ========== Spotify ==========
+@app.get("/api/services/spotify")
+async def spotify_endpoint(query: str):
+    result = await search_spotify(query)
+    return {"result": result} if result else {"error": "unavailable"}
+
+# ========== الطقس ==========
+@app.get("/api/services/weather")
+async def weather_endpoint(city: str = "Cairo", lat: Optional[float] = None, lon: Optional[float] = None):
+    result = await get_weather(city, lat, lon)
+    return {"result": result} if result else {"error": "unavailable"}
+
+# ========== Todoist ==========
+@app.get("/api/services/todoist")
+async def todoist_endpoint(token: str = ""):
+    result = await get_todoist_tasks(token)
+    return {"result": result}
+
+# ========== Google Calendar ==========
+@app.get("/api/services/calendar")
+async def calendar_endpoint(token: str = ""):
+    result = await get_calendar_events(token)
+    return {"result": result}
+
+# ========== خدمات أخرى ==========
 @app.get("/api/services/news")
 async def news_endpoint(query: str = "world", lang: str = "ar"):
-    from external_services import get_news
-    result = get_news(query, lang)
+    result = await get_news(query, lang)
     return {"result": result} if result else {"error": "unavailable"}
 
 @app.get("/api/services/maps")
 async def maps_endpoint(query: str):
-    from external_services import get_location_info
     return {"result": get_location_info(query)}
 
 @app.get("/api/services/knowledge")
 async def knowledge_endpoint(query: str):
-    from external_services import get_knowledge
-    result = get_knowledge(query)
+    result = await get_knowledge(query)
     return {"result": result} if result else {"error": "unavailable"}
 
+# ========== الإحالة ==========
 class ReferralCodeReq(BaseModel):
     code: str = Field(..., min_length=2, max_length=20)
 
@@ -366,6 +415,7 @@ async def activate_referral_endpoint(body: ReferralCodeReq, uid=Depends(get_user
         return {"success": True, "bonus": 500}
     raise HTTPException(400, result.get("error", "invalid_code"))
 
+# ========== AI Endpoints ==========
 @app.get("/api/ai/grok")
 async def grok_chat(prompt: str):
     from multi_ai import MultiAIClient

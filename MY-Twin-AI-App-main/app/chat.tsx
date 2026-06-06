@@ -1,4 +1,4 @@
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar, ListRenderItemInfo, InteractionManager } from 'react-native';
+import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar, ListRenderItemInfo, InteractionManager, Image as RNImage } from 'react-native';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, Href } from 'expo-router';
@@ -8,7 +8,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
-import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send } from 'lucide-react-native';
+import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera } from 'lucide-react-native';
 
 function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
@@ -67,7 +67,7 @@ function getSuggestions(lang: 'ar' | 'en') {
   ];
 }
 
-type ChatMessage = { role: 'user' | 'twin'; content: string };
+type ChatMessage = { role: 'user' | 'twin'; content: string; image?: string };
 
 export default function Chat() {
   const insets = useSafeAreaInsets();
@@ -112,15 +112,24 @@ export default function Chat() {
   const openMenu = useCallback(() => { setMenuVisible(true); Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(); }, [slideAnim]);
   const closeMenu = useCallback(() => { Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true }).start(() => setMenuVisible(false)); }, [slideAnim]);
 
-  const send = useCallback(async (msg?: string) => {
+  const send = useCallback(async (msg?: string, imageBase64?: string) => {
     const message = (msg || input).trim();
-    if (!message || loading) return;
+    if (!message && !imageBase64) return;
+    if (loading) return;
     triggerHaptic();
-    addMessage('user', message);
+    addMessage('user', message || '📷 صورة');
     setInput('');
     setLoading(true);
     try {
-      const res = await API.post('/api/chat', { message, twin_name: twinName, bond_level: bondLevel, relationship_dims: relationshipDims, calm_mode: calmMode, lang });
+      const res = await API.post('/api/chat', {
+        message: message || 'صورة مرفقة',
+        twin_name: twinName,
+        bond_level: bondLevel,
+        relationship_dims: relationshipDims,
+        calm_mode: calmMode,
+        lang,
+        image: imageBase64 || undefined,
+      });
       addMessage('twin', res.data.reply);
       updateBond(res.data.new_bond ?? bondLevel);
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
@@ -135,6 +144,16 @@ export default function Chat() {
     } finally { setLoading(false); }
   }, [input, loading, twinName, bondLevel, relationshipDims, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender]);
 
+  const handleCamera = useCallback(async () => {
+    setShowAttach(false);
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert(lang === 'ar' ? 'صلاحية' : 'Permission', lang === 'ar' ? 'مطلوب إذن الكاميرا' : 'Camera permission needed'); return; }
+    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.7 });
+    if (!result.canceled && result.assets?.[0]?.base64) {
+      send('', result.assets[0].base64);
+    }
+  }, [send, lang]);
+
   const handleVoice = useCallback(async () => {
     if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة للباقات المدفوعة' : 'Feature for paid plans'); return; }
     try {
@@ -146,11 +165,12 @@ export default function Chat() {
 
   const handleAttachAction = useCallback(async (action: string) => {
     setShowAttach(false);
+    if (action === 'camera') { handleCamera(); return; }
     if (action === 'image') {
       const p = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!p.granted) { Alert.alert('صلاحية', lang === 'ar' ? 'مطلوب إذن الصور' : 'Permission needed'); return; }
       const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true });
-      if (!r.canceled && r.assets?.[0]?.base64) send('صورة مرفقة');
+      if (!r.canceled && r.assets?.[0]?.base64) send('', r.assets[0].base64);
     } else if (action === 'file') {
       try {
         const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
@@ -160,7 +180,7 @@ export default function Chat() {
     else if (action === 'coach') send(lang === 'ar' ? 'أريد جلسة تدريب' : 'Coaching session');
     else if (action === 'dream') send(lang === 'ar' ? 'أريد تحليل حلمي' : 'Dream analysis');
     else Alert.alert(lang === 'ar' ? 'ميزة' : 'Feature', lang === 'ar' ? 'قيد التطوير' : 'Coming soon');
-  }, [send, lang]);
+  }, [send, lang, handleCamera]);
 
   const renderMsg = useCallback(({ item, index }: ListRenderItemInfo<ChatMessage>) => {
     const isUser = item.role === 'user';
@@ -168,6 +188,7 @@ export default function Chat() {
       <Animated.View style={[s.msgRow, isUser ? s.userRow : s.twinRow, index === chatHistory.length - 1 && { opacity: fadeAnim }]}>
         {!isUser && <TwinAvatar gender={twinGender} size={28} />}
         <View style={[s.bubble, isUser ? s.userBubble : s.twinBubble, !isUser && { marginLeft: 8 }]}>
+          {item.image ? <RNImage source={{ uri: `data:image/jpeg;base64,${item.image}` }} style={{ width: 200, height: 200, borderRadius: 12, marginBottom: 4 }} /> : null}
           <Text style={isUser ? s.userText : s.twinText}>{item.content}</Text>
         </View>
       </Animated.View>
@@ -193,7 +214,8 @@ export default function Chat() {
   ), [welcome, suggestions, send, isDark]);
 
   const attachItems = [
-    { icon: Image, label: lang === 'ar' ? 'صورة' : 'Image', action: 'image' },
+    { icon: Camera, label: lang === 'ar' ? 'كاميرا' : 'Camera', action: 'camera' },
+    { icon: Image, label: lang === 'ar' ? 'معرض' : 'Gallery', action: 'image' },
     { icon: FileText, label: lang === 'ar' ? 'ملف' : 'File', action: 'file' },
     { icon: Search, label: lang === 'ar' ? 'بحث' : 'Search', action: 'search' },
     { icon: Dumbbell, label: lang === 'ar' ? 'تدريب' : 'Coaching', action: 'coach' },

@@ -1,144 +1,132 @@
 """
-MyTwin - Memory Engine
-توليد التضمينات، تصنيف الذكريات، تخزينها واسترجاعها.
+MyTwin – Memory Engine v2.0
+يدعم:
+- استرجاع الذكريات (نصية + عاطفية)
+- تخزين الذكريات
+- تلخيص تلقائي للمحادثات الطويلة وتخزينها كسياق
 """
 import os
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import List, Dict
-
+from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone
 from supabase import create_client, Client
-import google.generativeai as genai
-from cache import get, set, delete
 
 logger = logging.getLogger(__name__)
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "")
 SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
-GEMINI_KEY   = os.getenv("GEMINI_API_KEY", "")
 
-if SUPABASE_URL and SUPABASE_KEY:
-    SUPABASE: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
-else:
-    SUPABASE = None
-    logger.warning("Supabase credentials missing - memory engine disabled.")
+if not SUPABASE_URL or not SUPABASE_KEY:
+    logger.warning("Supabase credentials missing. Memory engine will use fallback.")
 
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
-    _genai_ready = True
-else:
-    _genai_ready = False
-    logger.warning("Gemini API key missing - embeddings disabled.")
+db: Optional[Client] = create_client(SUPABASE_URL, SUPABASE_KEY) if SUPABASE_URL and SUPABASE_KEY else None
 
+# ========== استرجاع الذكريات ==========
 
-def emb(t: str) -> List[float]:
-    """توليد embedding للنص."""
-    if not _genai_ready:
-        logger.error("Gemini not initialized - cannot generate embeddings")
-        return [0.0] * 768
-
-    clean_text = t.strip()[:500]
-    if not clean_text:
-        return [0.0] * 768
-
+def retrieve(uid: str, query: str, days: int = 7, lim: int = 5, emotion_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    استرجاع الذكريات من Supabase.
+    إذا كان هناك مرشح عاطفي، نبحث عن ذكريات ذات صلة عاطفية.
+    """
+    if not db:
+        return []
     try:
-        result = genai.embed_content(
-            model="models/text-embedding-004",
-            content=clean_text,
-        )
-        return result.get("embedding", [0.0] * 768)
+        # البحث الأساسي
+        req = db.table("memories").select("*").eq("user_id", uid).order("created_at", desc=True).limit(lim)
+        
+        if emotion_filter:
+            # فلترة حسب المشاعر
+            req = req.eq("emotion", emotion_filter)
+        
+        res = req.execute()
+        mems = res.data or []
+        
+        # إضافة الملخصات المخزنة كسياق إضافي
+        summaries = get_summaries(uid)
+        if summaries:
+            # تحويل الملخصات إلى صيغة مشابهة للذكريات
+            for s in summaries:
+                mems.append({
+                    "content": s["summary"],
+                    "emotion": "summary",
+                    "created_at": s["created_at"],
+                })
+        
+        return mems[:lim]
     except Exception as e:
-        logger.warning(f"Embedding fallback: {e}")
-        return [0.0] * 768
+        logger.error(f"Memory retrieval error: {e}")
+        return []
 
-
-def classify(t: str) -> str:
-    """تصنيف نوع الذاكرة."""
-    if not t:
-        return "fact"
-    tl = t.lower()
-    if any(w in tl for w in ["احب", "اكره", "love", "hate"]):
-        return "pref"
-    if any(w in tl for w in ["حلم", "هدف", "dream", "wish", "hope"]):
-        return "dream"
-    return "fact"
-
-
-def store_mem(uid: str, content: str, imp: float = 0.5, tag: str = "neutral") -> None:
-    """حفظ ذاكرة جديدة."""
-    if not SUPABASE or not uid or not content:
+def store_mem(uid: str, content: str, importance: float = 0.5, emotion: str = "neutral") -> None:
+    """تخزين ذكرى جديدة"""
+    if not db:
         return
-
-    clean = content.strip()[:500]
-    if len(clean) < 3:
-        return
-
     try:
-        SUPABASE.table("memories").insert({
-            "user_id":         uid,
-            "content":         clean,
-            "category":        classify(clean),
-            "importance_score": max(0.0, min(1.0, imp)),
-            "emotional_tag":   tag,
-            "embedding":       emb(clean),
+        db.table("memories").insert({
+            "user_id": uid,
+            "content": content,
+            "importance": importance,
+            "emotion": emotion,
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }).execute()
-        delete(f"mem:{uid}")
     except Exception as e:
-        logger.error(f"store_mem error for {uid}: {e}")
+        logger.error(f"Memory store error: {e}")
 
+# ========== التلخيص التلقائي ==========
 
-def get_mems(uid: str, q: str = "", days: int = 7, lim: int = 5) -> List[Dict]:
-    """جلب أحدث الذكريات."""
-    if not SUPABASE or not uid:
-        return []
+SUMMARIZE_THRESHOLD = 20  # عدد الرسائل قبل التلخيص
 
-    cache_key = f"mem:{uid}:{days}"
-    cached = get(cache_key)
-    if cached:
-        return cached
-
-    cut = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
-
+async def check_and_summarize(uid: str, chat_history: List[Dict[str, str]], twin_name: str) -> None:
+    """
+    إذا تجاوزت المحادثة الحد المحدد، قم بتلخيصها وتخزين الملخص.
+    تُستدعى هذه الدالة من main.py بعد كل رد.
+    """
+    if len(chat_history) < SUMMARIZE_THRESHOLD:
+        return
+    
     try:
-        r = (
-            SUPABASE.table("memories")
-            .select("content, emotional_tag, created_at")
-            .eq("user_id", uid)
-            .gte("created_at", cut)
-            .order("importance_score", desc=True)
-            .limit(lim)
-            .execute()
+        # استدعاء نموذج AI لعمل التلخيص
+        from twin_brain import TwinBrain
+        brain = TwinBrain()
+        
+        # تجميع نص المحادثة
+        conversation = "\n".join([
+            f"{'المستخدم' if m['role'] == 'user' else twin_name}: {m['content']}"
+            for m in chat_history[-SUMMARIZE_THRESHOLD:]
+        ])
+        
+        # طلب التلخيص (نستخدم نفس النموذج السريع)
+        summary = await brain.multi.get_best_reply(
+            f"لخص هذه المحادثة في 3-5 جمل بالعربية، مع التركيز على أهم المواضيع والمشاعر:\n\n{conversation}",
+            task="general"
         )
-        result = r.data or []
-        set(cache_key, result, 600)
-        return result
+        
+        if summary:
+            store_summary(uid, summary)
+            logger.info(f"✅ Chat summarized for user {uid}")
     except Exception as e:
-        logger.error(f"get_mems error for {uid}: {e}")
+        logger.error(f"Summarization error: {e}")
+
+def store_summary(uid: str, summary: str) -> None:
+    """تخزين ملخص محادثة في جدول خاص"""
+    if not db:
+        return
+    try:
+        db.table("chat_summaries").insert({
+            "user_id": uid,
+            "summary": summary,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }).execute()
+    except Exception as e:
+        logger.error(f"Summary store error: {e}")
+
+def get_summaries(uid: str, limit: int = 3) -> List[Dict[str, Any]]:
+    """جلب آخر الملخصات المخزنة"""
+    if not db:
         return []
-
-def get_mems_ranked(uid, q="", days=7, lim=5):
-    mems = get_mems(uid, q, days, lim * 3)
-    scored = []
-    for mem in mems:
-        importance = mem.get("importance_score", 0.5)
-        similarity = 0.5  # يمكن تحسينها لاحقاً
-        emotion = 0.5 if mem.get("emotional_tag") else 0.3
-        recency = 1.0  # الأحدث له أولوية أعلى
-        score = importance * 0.4 + similarity * 0.3 + emotion * 0.2 + recency * 0.1
-        scored.append((score, mem))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [item[1] for item in scored[:lim]]
-
-# دالة جديدة لترتيب الذكريات حسب الأهمية + التشابه + العاطفة + الوقت
-def get_mems_ranked(uid: str, q: str = "", days: int = 7, lim: int = 5) -> List[Dict]:
-    mems = get_mems(uid, q, days, lim * 3)
-    scored = []
-    for mem in mems:
-        importance = mem.get("importance_score", 0.5)
-        similarity = 0.5  # يمكن تحسينها لاحقاً
-        emotion = 0.5 if mem.get("emotional_tag") else 0.3
-        recency = 1.0  # الأحدث له أولوية أعلى
-        score = importance * 0.4 + similarity * 0.3 + emotion * 0.2 + recency * 0.1
-        scored.append((score, mem))
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return [item[1] for item in scored[:lim]]
+    try:
+        res = db.table("chat_summaries").select("*").eq("user_id", uid).order("created_at", desc=True).limit(limit).execute()
+        return res.data or []
+    except Exception as e:
+        logger.error(f"Summary retrieval error: {e}")
+        return []

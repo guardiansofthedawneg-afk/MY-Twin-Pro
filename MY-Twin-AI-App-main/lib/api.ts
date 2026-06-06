@@ -15,36 +15,28 @@ export const API = axios.create({
 let _token = '';
 export function setToken(token: string) {
   _token = token;
-  console.log('✅ Token saved, length:', token.length);
 }
 export function getToken() { return _token; }
 
 async function getFreshToken(): Promise<string> {
-  if (_token && _token.length > 100) {
-    console.log('✅ Using memory token, length:', _token.length);
-    return _token;
-  }
+  if (_token && _token.length > 100) return _token;
   try {
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.access_token && session.access_token.length > 100) {
       _token = session.access_token;
-      console.log('✅ Got Supabase token, length:', _token.length);
       return _token;
     }
   } catch (e) {
     console.error('getSession error:', e);
   }
-  console.warn('❌ No valid token found');
   return '';
 }
 
+// ✅ إرسال التوكن في حقل Authorization فقط
 API.interceptors.request.use(async (config) => {
   const token = await getFreshToken();
   if (token) {
-    const authValue = `Bearer ${token}`;
-    config.headers['auth'] = authValue;
-    config.headers['Authorization'] = authValue;
-    console.log('📤 Sending auth header, total length:', authValue.length);
+    config.headers['Authorization'] = `Bearer ${token}`;
   }
   return config;
 });
@@ -63,9 +55,7 @@ API.interceptors.response.use(
         if (session?.access_token) {
           _token = session.access_token;
           const config = error.config!;
-          const authValue = `Bearer ${_token}`;
-          config.headers['auth'] = authValue;
-          config.headers['Authorization'] = authValue;
+          config.headers['Authorization'] = `Bearer ${_token}`;
           return API(config);
         }
       } catch {}
