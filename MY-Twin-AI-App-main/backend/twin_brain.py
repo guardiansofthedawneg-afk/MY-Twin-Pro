@@ -172,7 +172,7 @@ class TwinBrain:
 
         # --- Emotion & Reasoning (الجديد) ---
         emotion = await self.detect_emotion(message)
-        reasoning_result = await self.reasoning_engine.reason(message, emotion, "")
+        reasoning_result = await self.reasoning_engine.reason(message, emotion, "", lang)
 
         # --- Memory Context (الجديد) ---
         memory_context = ""
@@ -189,7 +189,7 @@ class TwinBrain:
                 from consciousness_core import ConsciousnessCore
                 consciousness = ConsciousnessCore(twin_name=twin_name)
                 await consciousness.load_state(user_id)
-                thought_result = await consciousness.think(user_id, message, emotion)
+                thought_result = await consciousness.think(user_id, message, emotion, lang)
                 consciousness_context = {
                     "last_thought": thought_result.get("thought", ""),
                     "active_goals": consciousness.internal_state.get("active_goals", []),

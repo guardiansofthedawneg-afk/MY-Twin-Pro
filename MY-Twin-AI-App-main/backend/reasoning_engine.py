@@ -1,10 +1,4 @@
-"""
-MyTwin – Reasoning Engine v2.0 (Agentic Reasoning)
-- Thought: تحليل عميق للموقف
-- Plan: خطة عمل واضحة
-- Action: الإجراء المطلوب
-- Response: الرد النهائي
-"""
+"""MyTwin – Reasoning Engine v2.1 (يدعم العربية + شخصية التوأم)"""
 import os, logging, json, asyncio
 from typing import Dict, Any, Optional
 import google.generativeai as genai
@@ -20,22 +14,14 @@ class ReasoningEngine:
         else:
             self.model = None
 
-    async def reason(
-        self,
-        message: str,
-        emotion: Dict[str, Any],
-        context: str = "",
-    ) -> Dict[str, Any]:
-        """
-        يحلل الموقف ويعيد خطة عمل.
-        يُرجع: thought, plan, action, response
-        """
+    async def reason(self, message: str, emotion: Dict[str, Any], context: str = "", lang: str = "ar") -> Dict[str, Any]:
         if not self.model:
             return self._fallback_reason(emotion)
 
-        prompt = f"""أنت خبير في التواصل الإنساني وعلم النفس. حلل الموقف التالي وأعد ONLY JSON object (بدون أي نص آخر) يحتوي على:
-- "thought": تحليل عميق للموقف (جملة واحدة)
-- "plan": خطة للرد (جملة واحدة)
+        if lang == "ar":
+            prompt = f"""أنت خبير في التواصل الإنساني وعلم النفس. حلل الموقف التالي وأعد ONLY JSON object (بدون أي نص آخر) يحتوي على:
+- "thought": تحليل عميق للموقف بالعامية (جملة واحدة)
+- "plan": خطة للرد بالعامية (جملة واحدة)
 - "action": الإجراء المطلوب (one of: support, advice, listen, celebrate, motivate, inform, search, music)
 - "response_style": أسلوب الرد (one of: warm, direct, gentle, enthusiastic, calm)
 
@@ -45,6 +31,12 @@ class ReasoningEngine:
 شدة المشاعر: {emotion.get('intensity', 0.5)}
 احتياج المستخدم: {emotion.get('needs', 'general')}
 
+JSON:"""
+        else:
+            prompt = f"""You are an expert in human communication. Analyze this and return ONLY JSON:
+{{"thought": "...", "plan": "...", "action": "...", "response_style": "..."}}
+Message: "{message}"
+Emotion: {emotion.get('primary', 'neutral')}
 JSON:"""
 
         try:
@@ -61,10 +53,7 @@ JSON:"""
         return self._fallback_reason(emotion)
 
     def _fallback_reason(self, emotion: Dict[str, Any]) -> Dict[str, Any]:
-        """احتياطي: تحليل بسيط بناءً على المشاعر"""
         primary = emotion.get("primary", "neutral")
-        needs = emotion.get("needs", "general")
-
         plans = {
             "joy": {"thought": "المستخدم سعيد، يجب مشاركته فرحته", "plan": "شاركه الفرحة واسأله عن التفاصيل", "action": "celebrate", "response_style": "enthusiastic"},
             "sadness": {"thought": "المستخدم حزين، يحتاج للدعم", "plan": "استمع له بتعاطف ثم قدم الدعم", "action": "support", "response_style": "gentle"},
@@ -77,5 +66,4 @@ JSON:"""
 
     @staticmethod
     def explain(provider: str, task: str, memories: list, personality: Optional[Dict] = None) -> str:
-        """للتكامل مع twin_brain.py القديم"""
         return f"Reasoning: provider={provider}, task={task}, memories={len(memories)}"

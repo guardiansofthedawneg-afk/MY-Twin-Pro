@@ -1,50 +1,29 @@
-import { PostHog } from 'posthog-react-native';
-
-const POSTHOG_KEY = process.env.EXPO_PUBLIC_POSTHOG_KEY || '';
-const POSTHOG_HOST = 'https://app.posthog.com';
+import PostHog from 'posthog-react-native';
 
 let posthog: PostHog | null = null;
 
-export const initPostHog = () => {
-  if (!POSTHOG_KEY) {
-    console.warn('PostHog key missing, analytics disabled.');
+export async function initAnalytics() {
+  const apiKey = process.env.EXPO_PUBLIC_POSTHOG_KEY;
+  if (!apiKey) {
+    console.log('PostHog key not set, analytics disabled');
     return;
   }
   try {
-    posthog = new PostHog(POSTHOG_KEY, {
-      host: POSTHOG_HOST,
-      disableGeoip: false,
+    posthog = new PostHog(apiKey, {
+      host: process.env.EXPO_PUBLIC_POSTHOG_HOST || 'https://app.posthog.com',
     });
+    console.log('✅ PostHog initialized');
   } catch (e) {
-    console.error('Failed to initialize PostHog:', e);
+    console.error('PostHog init failed:', e);
   }
-};
+}
 
-export const track = (event: string, properties?: Record<string, string | number | boolean>) => {
+export function track(event: string, properties?: Record<string, any>) {
   if (!posthog) return;
-  try {
-    posthog.capture(event, properties as any);
-  } catch (e) {
-    console.warn('Failed to track event:', e);
-  }
-};
+  posthog.capture(event, properties);
+}
 
-export const identifyUser = (userId: string, properties?: Record<string, string | number | boolean>) => {
+export function identify(userId: string, traits?: Record<string, any>) {
   if (!posthog) return;
-  try {
-    posthog.identify(userId, properties as any);
-  } catch (e) {
-    console.warn('Failed to identify user:', e);
-  }
-};
-
-export const resetUser = () => {
-  if (!posthog) return;
-  try {
-    posthog.reset();
-  } catch (e) {
-    console.warn('Failed to reset user:', e);
-  }
-};
-
-export default posthog;
+  posthog.identify(userId, traits);
+}

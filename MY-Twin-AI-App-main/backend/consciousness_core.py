@@ -1,9 +1,4 @@
-"""
-MyTwin – Consciousness Core v2.0
-- Internal Thoughts (التوأم يفكر بشكل استباقي)
-- Long Term Goals (أهداف تؤثر على الردود)
-- Curiosity System (التوأم يسأل من تلقاء نفسه)
-"""
+"""MyTwin – Consciousness Core v2.1 (يدعم العربية + شخصية التوأم)"""
 import os, logging, asyncio, json, random
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
@@ -39,25 +34,27 @@ class ConsciousnessCore:
             return create_client(url, key)
         return None
 
-    # ========== التفكير الاستباقي (Proactive Thinking) ==========
-    async def think(self, user_id: str, user_message: str, emotion: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        يولد التوأم أفكارًا داخلية بناءً على رسالة المستخدم.
-        هذه الأفكار تُستخدم لإثراء الـ Prompt.
-        """
+    async def think(self, user_id: str, user_message: str, emotion: Dict[str, Any], lang: str = "ar") -> Dict[str, Any]:
         if not self.model:
             return {"thought": "", "goal": "", "question": ""}
 
-        prompt = f"""أنت {self.twin_name}، رفيق ذكي ومتعاطف. فكر بهدوء في رسالة المستخدم التالية.
-        أجب ONLY ب JSON object (بدون أي نص آخر) يحتوي على:
-        - "thought": فكرة داخلية واحدة (كأنك تفكر بصوت عالٍ). مثال: "محمد يبدو متوترًا اليوم، ربما يحتاج لمساحة للتحدث".
-        - "goal": هدف واحد طويل المدى يمكنك مساعدته فيه. مثال: "مساعدة محمد على إدارة توتره".
-        - "question": سؤال واحد يمكنك طرحه لاحقًا لإظهار الاهتمام (وليس الآن).
+        if lang == "ar":
+            prompt = f"""أنت {self.twin_name}، رفيق ذكي ومتعاطف. فكر بهدوء في رسالة المستخدم التالية.
+            أجب ONLY ب JSON object (بدون أي نص آخر) يحتوي على:
+            - "thought": فكرة داخلية واحدة بالعامية (كأنك تفكر بصوت عالٍ). مثال: "محمد يبدو متوتر اليوم، يمكن محتاج يفضفض".
+            - "goal": هدف واحد طويل المدى يمكنك مساعدته فيه بالعامية. مثال: "أساعد محمد يتحكم في توتره".
+            - "question": سؤال واحد يمكنك طرحه لاحقًا بالعامية.
 
-        رسالة المستخدم: "{user_message}"
-        مشاعره الحالية: {emotion.get('primary', 'neutral')}
+            رسالة المستخدم: "{user_message}"
+            مشاعره الحالية: {emotion.get('primary', 'neutral')}
 
-        JSON:"""
+            JSON:"""
+        else:
+            prompt = f"""You are {self.twin_name}, a caring friend. Think about this message:
+            Return ONLY JSON: {{"thought": "...", "goal": "...", "question": "..."}}
+            Message: "{user_message}"
+            Emotion: {emotion.get('primary', 'neutral')}
+            JSON:"""
 
         try:
             loop = asyncio.get_running_loop()
@@ -75,44 +72,40 @@ class ConsciousnessCore:
 
         return {"thought": "", "goal": "", "question": ""}
 
-    # ========== الفضول (Curiosity System) ==========
-    def get_proactive_question(self, user_id: str) -> Optional[str]:
-        """
-        بناءً على تاريخ التفاعل، يقرر التوأم ما إذا كان يجب أن يسأل سؤالاً.
-        """
+    def get_proactive_question(self, user_id: str, lang: str = "ar") -> Optional[str]:
         if not self.internal_state.get("last_thought"):
             return None
-
-        # يزيد الفضول مع قلة التفاعل
         self.internal_state["curiosity"] += 0.1
         if self.internal_state["curiosity"] > 0.7:
             self.internal_state["curiosity"] = 0.0
-            # اختيار سؤال عشوائي من الأسئلة المخزنة
-            return self._generate_question()
-
+            return self._generate_question(lang)
         return None
 
-    def _generate_question(self) -> str:
-        questions = [
-            "كيف كان يومك اليوم؟",
-            "هل هناك شيء يشغل بالك حاليًا؟",
-            "تذكرت حديثنا السابق عن أهدافك، كيف تسير الأمور؟",
-            "ما الشيء الذي أسعدك مؤخرًا؟",
-            "هل جربت شيئًا جديدًا هذه الأيام؟",
-        ]
+    def _generate_question(self, lang: str = "ar") -> str:
+        if lang == "ar":
+            questions = [
+                "إيه أخبارك النهاردة؟",
+                "فيه حاجة شاغلة بالك؟",
+                "كنت بفكر فيك، إيه آخر إنجاز عملته؟",
+                "حاسس إنك محتاج تتكلم، أنا جنبك 💜",
+                "جربت حاجة جديدة الأيام دي؟"
+            ]
+        else:
+            questions = [
+                "How are you doing today?",
+                "Anything on your mind?",
+                "I was thinking about you, any updates?",
+                "You seem like you need to talk, I'm here 💜",
+                "Tried anything new lately?"
+            ]
         return random.choice(questions)
 
-    # ========== أهداف طويلة المدى (Long Term Goals) ==========
     def get_goals_context(self) -> str:
-        """
-        يُرجع الأهداف النشطة كسياق للـ Prompt.
-        """
         goals = self.internal_state.get("active_goals", [])
         if not goals:
             return ""
         return "أهداف المستخدم الحالية: " + ", ".join(goals[-3:])
 
-    # ========== حفظ واسترجاع الحالة ==========
     async def load_state(self, user_id: str) -> Dict[str, Any]:
         if not self.db:
             return {}
@@ -137,7 +130,6 @@ class ConsciousnessCore:
         except Exception as e:
             logger.warning(f"Failed to save state: {e}")
 
-    # ========== دوال التوافق مع main.py ==========
     def get_consciousness_state(self) -> Dict[str, Any]:
         return self.internal_state
 
