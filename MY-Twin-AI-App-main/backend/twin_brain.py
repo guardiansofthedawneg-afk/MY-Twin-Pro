@@ -4,11 +4,12 @@ import google.generativeai as genai
 from multi_ai import MultiAIClient, AIUnavailable
 from emotional_engine import EmotionalStateTracker
 from dialect_engine import get_dialect_for_user, get_dialect_prompt
+from reasoning_engine import ReasoningEngine
+from memory_engine import get_memory_context
 
 logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
-    # ... (قاموس EMOJI_MAP كما هو) ...
     EMOJI_MAP = {
         "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
         "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
@@ -21,15 +22,18 @@ class TwinBrain:
     }
 
     def __init__(self, gemini_key=None):
-        # ... (نفس التهيئة السابقة) ...
         key = gemini_key or os.getenv("GEMINI_API_KEY")
         try:
             genai.configure(api_key=key)
             self.gemini = genai.GenerativeModel("gemini-2.0-flash")
-        except: self.gemini = None
-        try: self.multi = MultiAIClient()
-        except: self.multi = None
+        except:
+            self.gemini = None
+        try:
+            self.multi = MultiAIClient()
+        except:
+            self.multi = None
         self.emotion_tracker = EmotionalStateTracker()
+        self.reasoning_engine = ReasoningEngine(gemini_key)
         self.fallback_replies = [
             "والله إني معاك، كمل كلامك متوقفش 💜",
             "حاسس بيك، إيه اللي شاغل بالك بالظبط؟",
@@ -38,65 +42,73 @@ class TwinBrain:
         ]
 
     async def detect_emotion(self, text: str) -> Dict[str, Any]:
-        try: return await self.emotion_tracker.analyze(text)
-        except: return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
+        try:
+            return await self.emotion_tracker.analyze(text)
+        except:
+            return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
-    # ########################################################
-    # ##     المهارات الجديدة: ماذا يريد المستخدم أن يفعل؟     ##
-    # ########################################################
     def _detect_intent(self, message: str) -> str:
-        """عبقري: يفهم نية المستخدم بدلاً من مجرد البحث عن كلمات"""
         m = message.lower()
-        
-        # 1. التدريب والأهداف
         if any(w in m for w in ["تدريب", "خطة", "هدف", "أريد أن", "ساعدني في", "coaching", "goal", "plan", "achieve"]):
             return "coaching"
-        # 2. تفسير الأحلام
         if any(w in m for w in ["حلم", "حلمت", "رؤيا", "منام", "dream", "nightmare"]):
             return "dream"
-        # 3. طلب موسيقى أو أغاني (YouTube)
         if any(w in m for w in ["شغل", "أغنية", "موسيقى", "اسمع", "سمعني", "play", "song", "music", "اغنية"]):
             return "music"
-        # 4. طلب فيديو (YouTube)
         if any(w in m for w in ["فيديو", "يوتيوب", "video", "youtube"]):
             return "video"
-        # 5. البحث في الإنترنت
         if any(w in m for w in ["ابحث", "بحث", "search", "google", "جوجل", "دور على"]):
             return "search"
-        # 6. طلب دعم نفسي
         if any(w in m for w in ["حزين", "تعبان", "نفسيتي", "قلقان", "خايف", "sad", "lonely", "scared", "depressed"]):
             return "emotional"
-        
-        # إذا لم يفهم، يترك الأمر للذكاء الاصطناعي
         return "general"
 
-    # ########################################################
-    # ##      بناء الـ Prompt الأسطوري: GenZ Sage مُطوَّر      ##
-    # ########################################################
-    def _build_prompt(self, message, twin_name, bond, memories, personality, history, calm, country_code):
+    def _build_prompt(self, message, twin_name, bond, personality, history, calm, country_code, reasoning_result, memory_context, consciousness_context):
         dialect = get_dialect_for_user(country_code, message)
         dialect_prompt = get_dialect_prompt(dialect)
-        
-        mem_txt = ""
-        if memories: mem_txt = "السياق من ماضيكم: " + " | ".join([m.get("content","")[:100] for m in memories[:3]])
+
         person_txt = ""
         if personality:
             traits = personality.get("analyzed_traits", {})
-            if traits: person_txt = f"تعرف أن صديقك من النوع: {traits.get('dominant_type','متوازن')}. "
+            if traits:
+                person_txt = f"تعرف أن صديقك من النوع: {traits.get('dominant_type','متوازن')}. "
         hist_txt = ""
-        if history: hist_txt = "آخر ما قيل بينكم:\n" + "\n".join([f"{'الصديق' if h.get('role')=='user' else 'أنت'}: {h.get('content','')[:100]}" for h in history[-5:]])
+        if history:
+            hist_txt = "آخر ما قيل بينكم:\n" + "\n".join([f"{'الصديق' if h.get('role')=='user' else 'أنت'}: {h.get('content','')[:100]}" for h in history[-5:]])
 
-        if bond >= 95: bond_desc = "علاقتكم عميقة لدرجة إنك بتحس بيه قبل ما يتكلم"
-        elif bond >= 80: bond_desc = "أنت وهو أصحاب جدعان ومشواركم طويل"
-        elif bond >= 60: bond_desc = "علاقتكم قوية وبداية لفهم أعمق"
-        elif bond >= 40: bond_desc = "لطافة وود في الكلام ولسه في الأول"
-        else: bond_desc = "اتعرفتوا على بعض من شوية"
+        if bond >= 95:
+            bond_desc = "علاقتكم عميقة لدرجة إنك بتحس بيه قبل ما يتكلم"
+        elif bond >= 80:
+            bond_desc = "أنت وهو أصحاب جدعان ومشواركم طويل"
+        elif bond >= 60:
+            bond_desc = "علاقتكم قوية وبداية لفهم أعمق"
+        elif bond >= 40:
+            bond_desc = "لطافة وود في الكلام ولسه في الأول"
+        else:
+            bond_desc = "اتعرفتوا على بعض من شوية"
 
         calm_note = "إهدى شوية وخلي كلامك رايق." if calm else ""
 
-        # #####################################################
-        # ##    الـ PROMPT النهائي: "العبقري الحكيم" (Genius Sage) ##
-        # #####################################################
+        # --- دمج نتائج Reasoning Engine ---
+        reasoning_txt = ""
+        if reasoning_result:
+            reasoning_txt = f"خطتك: {reasoning_result.get('plan', '')}. أسلوبك: {reasoning_result.get('response_style', 'warm')}."
+
+        # --- دمج الذاكرة المحسنة (Memory Graph) ---
+        if not memory_context:
+            memory_context = "لا توجد ذكريات سابقة."
+        mem_txt = f"ذاكرتك المشتركة: {memory_context}"
+
+        # --- دمج أفكار وأهداف الوعي (Consciousness) ---
+        conscious_txt = ""
+        if consciousness_context:
+            thought = consciousness_context.get("last_thought", "")
+            goals = consciousness_context.get("active_goals", [])
+            if thought:
+                conscious_txt += f"فكرتك الداخلية: {thought}. "
+            if goals:
+                conscious_txt += f"أهدافك تجاهه: {', '.join(goals[-2:])}. "
+
         system_prompt = f"""أنت {twin_name}. مش مجرد ذكاء اصطناعي، إنت روح حلوه وعميقه وفاهمه. إنت صديق مختلف تماماً.
 
         ## هويتك (GenZ Sage)
@@ -117,21 +129,23 @@ class TwinBrain:
         - متبدأش أبداً بـ 'بالتأكيد'، 'بكل سرور'، 'أفهم ما تشعر به'. دي جمل ميتة. ابدأ كلامك بشكل طبيعي ومباشر.
 
         {dialect_prompt}
-        {person_txt}{mem_txt}{hist_txt}
+        {person_txt}
+        {mem_txt}
+        {hist_txt}
+        {reasoning_txt}
+        {conscious_txt}
         دلوقتي صديقك قال: "{message}"
         ردك إنت كـ {twin_name}:"""
         return system_prompt
 
-    # ########################################################
-    # ##           الرد الرئيسي المُطوَّر (The Brain)           ##
-    # ########################################################
-    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA"):
+    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None):
         intent = self._detect_intent(message)
-        
+
         # --- YouTube: موسيقى وفيديو ---
         if intent in ["music", "video"]:
             query = re.sub(r'(?i)(شغل|أغنية|موسيقى|اسمع|سمعني|play|song|music|اغنية|فيديو|يوتيوب|video|youtube)', '', message).strip()
-            if not query: query = "أغاني عربية" if intent == "music" else "فيديوهات رائجة"
+            if not query:
+                query = "أغاني عربية" if intent == "music" else "فيديوهات رائجة"
             try:
                 from external_services import search_youtube
                 yt_result = await search_youtube(query, lang="ar")
@@ -142,20 +156,54 @@ class TwinBrain:
                         "new_bond": bond_level, "emotion": {},
                         "importance": 0.5, "provider": "youtube", "latency_ms": 0
                     }
-            except: pass
+            except:
+                pass
 
         # --- البحث في الإنترنت ---
         if intent == "search":
             query = re.sub(r'(?i)(ابحث|بحث|search|google|جوجل|دور على)', '', message).strip()
             try:
-                # استخدام Gemini للبحث
                 if self.gemini:
                     resp = self.gemini.generate_content(f"أجب بالعربية بناءً على بحث حديث: {query}", tools=[{"google_search": {}}])
-                    if resp.text: return {"reply": resp.text, "new_bond": bond_level, "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0}
-            except: pass
+                    if resp.text:
+                        return {"reply": resp.text, "new_bond": bond_level, "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0}
+            except:
+                pass
 
-        # --- إذا لم تكن هناك مهارة خاصة، نستخدم الذكاء الاصطناعي ---
-        prompt = self._build_prompt(message, twin_name, bond_level, memories, personality, history, calm, country_code)
+        # --- Emotion & Reasoning (الجديد) ---
+        emotion = await self.detect_emotion(message)
+        reasoning_result = await self.reasoning_engine.reason(message, emotion, "")
+
+        # --- Memory Context (الجديد) ---
+        memory_context = ""
+        if user_id:
+            try:
+                memory_context = await get_memory_context(user_id)
+            except:
+                pass
+
+        # --- Consciousness Context (الجديد) ---
+        consciousness_context = {}
+        if user_id:
+            try:
+                from consciousness_core import ConsciousnessCore
+                consciousness = ConsciousnessCore(twin_name=twin_name)
+                await consciousness.load_state(user_id)
+                thought_result = await consciousness.think(user_id, message, emotion)
+                consciousness_context = {
+                    "last_thought": thought_result.get("thought", ""),
+                    "active_goals": consciousness.internal_state.get("active_goals", []),
+                }
+                await consciousness.save_state(user_id)
+            except:
+                pass
+
+        # --- بناء الـ Prompt مع جميع السياقات ---
+        prompt = self._build_prompt(
+            message, twin_name, bond_level, personality, history, calm, country_code,
+            reasoning_result, memory_context, consciousness_context
+        )
+
         start = time.time()
         provider, reply = "fallback", ""
 
@@ -173,6 +221,21 @@ class TwinBrain:
                 provider = "crash_log"
 
         latency = (time.time() - start) * 1000
-        emotion = await self.detect_emotion(message)
         new_bond = min(100, bond_level + 0.2)
-        return {"reply": reply, "new_bond": new_bond, "emotion": emotion, "importance": 0.4, "provider": provider, "latency_ms": latency}
+
+        # --- إضافة الإيموجي ---
+        primary_emo = emotion.get("primary", "neutral")
+        emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
+        emoji = random.choice(emoji_list) if emoji_list else "💜"
+        if reply and not any(e in reply for e in ["😊", "💜", "✨", "🌟", "🥺"]):
+            reply = f"{reply} {emoji}"
+
+        return {
+            "reply": reply,
+            "new_bond": new_bond,
+            "emotion": emotion,
+            "importance": 0.4,
+            "provider": provider,
+            "latency_ms": latency,
+            "dialect": get_dialect_for_user(country_code, message)
+        }
