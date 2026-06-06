@@ -46,7 +46,9 @@ class TwinBrain:
 
     def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            return self.emotion_tracker.analyze(text)        except:
+            try:
+            return self.emotion_tracker.analyze(text)
+        except:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
     def _detect_task(self, message: str) -> str:
