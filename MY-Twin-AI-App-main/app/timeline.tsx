@@ -16,7 +16,7 @@ export default function Timeline() {
 
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <View style={s.container}>
+      <View style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
         <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('خط الذكريات','Memory Timeline')}</Text>
         <FlatList
           data={memories}

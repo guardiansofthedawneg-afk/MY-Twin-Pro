@@ -99,8 +99,8 @@ export default function Layout() {
           <Stack.Screen name="timeline" />
           <Stack.Screen name="privacy" />
           <Stack.Screen name="help" />
+        <Stack.Screen name="referral" />
           <Stack.Screen name="about" />
-          <Stack.Screen name="referral" />
         </Stack>
         <SideMenu visible={menuVisible} onClose={() => setMenuVisible(false)} />
       </ToastProvider>

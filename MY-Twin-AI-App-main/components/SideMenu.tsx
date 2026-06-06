@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTwinStore } from '../store/useTwinStore';
 import { router, Href } from 'expo-router';
-import { Home, MessageCircle, History, User, BrainCircuit, Palette, Diamond, Settings, HelpCircle, LogOut, X, PlusCircle } from 'lucide-react-native';
+import { Home, MessageCircle, History, User, BrainCircuit, Palette, Diamond, Settings, HelpCircle, LogOut, X, PlusCircle, Gift } from 'lucide-react-native';
 
 export default function SideMenu({ onClose }: { onClose: () => void }) {
   const { lang, theme, clearHistory } = useTwinStore();
@@ -23,6 +23,7 @@ export default function SideMenu({ onClose }: { onClose: () => void }) {
     { icon: BrainCircuit, label: t('ذكريات','Memories'), route: '/memories' as Href },
     { icon: Palette, label: t('تخصيص','Customize'), route: '/customize' as Href },
     { icon: Diamond, label: t('الاشتراكات','Subscription'), route: '/subscription' as Href },
+    { icon: Gift, label: t('الإحالة','Referral'), route: '/referral' as Href },
     { icon: Settings, label: t('الإعدادات','Settings'), route: '/settings' as Href },
   ];
 

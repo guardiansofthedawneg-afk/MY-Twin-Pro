@@ -1,9 +1,9 @@
-import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert } from 'react-native';
+import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, Switch, Alert, Linking } from 'react-native';
 import { router, Href } from 'expo-router';
 import { useTwinStore } from '../store/useTwinStore';
 import { supabase } from '../lib/supabase';
 import { API } from '../lib/api';
-import { Moon, Sun, Globe, Crown, Target, HeartPulse, History, Shield, Download, LogOut, Trash2 } from 'lucide-react-native';
+import { Moon, Sun, Globe, Crown, Target, HeartPulse, History, Shield, Download, LogOut, Trash2, Phone } from 'lucide-react-native';
 
 type AppRoute = Href & ('/subscription'|'/goals'|'/mood'|'/timeline'|'/privacy'|'/help');
 
@@ -43,86 +43,87 @@ export default function Settings() {
     } catch { Alert.alert('خطأ', 'فشل تصدير البيانات'); }
   };
 
+  const handleEmergency = () => {
+    const number = lang === 'ar' ? 'https://findahelpline.com' : 'https://findahelpline.com';
+    Linking.openURL(number);
+  };
+
   return (
     <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-    <ScrollView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <View style={s.content}>
-        <Text style={[s.title, isDark && { color: '#FFF' }]}>{t.title}</Text>
+      <ScrollView style={s.container}>
+        <View style={s.content}>
+          <Text style={[s.title, isDark && { color: '#FFF' }]}>{t.title}</Text>
 
-        <View style={[s.tierBadge, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
-          <Crown size={14} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-          <Text style={[s.tierText, isDark && { color: '#D8B4FE' }]}> {t.tier}: {tier}</Text>
-        </View>
-
-        <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
-          <View style={s.rowLeft}>
-            {theme === 'dark' ? <Moon size={18} stroke="#D8B4FE" /> : <Sun size={18} stroke="#6B21A8" />}
-            <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.theme}</Text>
+          <View style={[s.tierBadge, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+            <Crown size={14} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+            <Text style={[s.tierText, isDark && { color: '#D8B4FE' }]}> {t.tier}: {tier}</Text>
           </View>
-          <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={theme === 'dark' ? '#FFF' : '#F4F4F4'} />
-        </View>
 
-        <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
-          <View style={s.rowLeft}>
-            <HeartPulse size={18} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-            <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.calm}</Text>
+          <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+            <View style={s.rowLeft}>
+              {theme === 'dark' ? <Moon size={18} stroke="#D8B4FE" /> : <Sun size={18} stroke="#6B21A8" />}
+              <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.theme}</Text>
+            </View>
+            <Switch value={theme === 'dark'} onValueChange={toggleTheme} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={theme === 'dark' ? '#FFF' : '#F4F4F4'} />
           </View>
-          <Switch value={calmMode} onValueChange={toggleCalmMode} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={calmMode ? '#FFF' : '#F4F4F4'} />
-        </View>
 
-        <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
-          <View style={s.rowLeft}>
-            <Globe size={18} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-            <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.lang}</Text>
+          <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+            <View style={s.rowLeft}>
+              <HeartPulse size={18} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+              <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.calm}</Text>
+            </View>
+            <Switch value={calmMode} onValueChange={toggleCalmMode} trackColor={{false:'#DDD', true:'#6B21A8'}} thumbColor={calmMode ? '#FFF' : '#F4F4F4'} />
           </View>
-          <TouchableOpacity onPress={toggleLang} style={s.langBtn}>
-            <Text style={s.langText}>{lang === 'ar' ? 'AR' : 'EN'}</Text>
+
+          <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
+            <View style={s.rowLeft}>
+              <Globe size={18} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+              <Text style={[s.label, isDark && { color: '#FFF' }]}>{t.lang}</Text>
+            </View>
+            <TouchableOpacity onPress={toggleLang} style={s.langBtn}>
+              <Text style={s.langText}>{lang === 'ar' ? 'AR' : 'EN'}</Text>
+            </TouchableOpacity>
+          </View>
+
+          {[
+            { icon:Crown, label:t.upgrade, route:'/subscription' as AppRoute },
+            { icon:Target, label:t.goals, route:'/goals' as AppRoute },
+            { icon:HeartPulse, label:t.mood, route:'/mood' as AppRoute },
+            { icon:History, label:t.timeline, route:'/timeline' as AppRoute },
+            { icon:Shield, label:t.privacy, route:'/privacy' as AppRoute },
+          ].map(({ icon:Icon, label, route }) => (
+            <TouchableOpacity key={route} style={[s.btn, isDark && { backgroundColor: '#D8B4FE' }]} onPress={()=>router.push(route)}>
+              <Icon size={16} stroke={isDark ? '#1A1A1A' : '#FFF'} />
+              <Text style={[s.btnText, isDark && { color: '#1A1A1A' }]}>{label}</Text>
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity style={[s.btn, isDark && { backgroundColor: '#D8B4FE' }]} onPress={handleExport}>
+            <Download size={16} stroke={isDark ? '#1A1A1A' : '#FFF'} />
+            <Text style={[s.btnText, isDark && { color: '#1A1A1A' }]}>{t.export}</Text>
           </TouchableOpacity>
-        </View>
 
-        {[
-          { icon:Crown, label:t.upgrade, route:'/subscription' as AppRoute },
-          { icon:Target, label:t.goals, route:'/goals' as AppRoute },
-          { icon:HeartPulse, label:t.mood, route:'/mood' as AppRoute },
-          { icon:History, label:t.timeline, route:'/timeline' as AppRoute },
-          { icon:Shield, label:t.privacy, route:'/privacy' as AppRoute },
-        ].map(({ icon:Icon, label, route }) => (
-          <TouchableOpacity key={route} style={[s.btn, isDark && { backgroundColor: '#D8B4FE' }]} onPress={()=>router.push(route)}>
-            <Icon size={16} stroke={isDark ? '#1A1A1A' : '#FFF'} />
-            <Text style={[s.btnText, isDark && { color: '#1A1A1A' }]}>{label}</Text>
+          <TouchableOpacity style={[s.btn, { backgroundColor: '#FFF3F3', borderColor: '#FFCDD2', borderWidth: 1 }]} onPress={handleEmergency}>
+            <Phone size={16} stroke="#EF4444" />
+            <Text style={[s.btnText, { color: '#EF4444' }]}>{t.emergency}</Text>
           </TouchableOpacity>
-        ))}
 
-        <TouchableOpacity style={[s.btn, isDark && { backgroundColor: '#D8B4FE' }]} onPress={handleExport}>
-          <Download size={16} stroke={isDark ? '#1A1A1A' : '#FFF'} />
-          <Text style={[s.btnText, isDark && { color: '#1A1A1A' }]}>{t.export}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={[s.btn, s.outlineBtn, isDark && { backgroundColor: '#2A2A2A' }]} onPress={logout}>
+            <LogOut size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+            <Text style={[s.btnText, { color: isDark ? '#D8B4FE' : '#6B21A8' }]}>{t.logout}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[s.btn, { backgroundColor: '#FFF3F3', borderColor: '#FFCDD2', borderWidth: 1 }]} onPress={()=>router.push('/help' as AppRoute)}>
-          <HeartPulse size={16} stroke="#EF4444" />
-          <Text style={[s.btnText, { color: '#EF4444' }]}>{t.emergency}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity style={[s.btn, s.dangerBtn]} onPress={deleteAccount}>
+            <Trash2 size={16} stroke="#EF4444" />
+            <Text style={[s.btnText, { color: '#EF4444' }]}>{t.delete}</Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity style={[s.btn, s.outlineBtn, isDark && { backgroundColor: '#2A2A2A' }]} onPress={logout}>
-          <LogOut size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-          <Text style={[s.btnText, { color: isDark ? '#D8B4FE' : '#6B21A8' }]}>{t.logout}</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[s.btn, s.dangerBtn]} onPress={deleteAccount}>
-          <Trash2 size={16} stroke="#EF4444" />
-          <Text style={[s.btnText, { color: '#EF4444' }]}>{t.delete}</Text>
-        </TouchableOpacity>
-
-        <View style={[s.branding, isDark && { borderTopColor: '#444' }]}>
-          <Text style={[s.brandingTitle, isDark && { color: '#D8B4FE' }]}>{t.company}</Text>
-          <Text style={s.brandingSub}>{t.companyDesc}</Text>
+          <View style={[s.branding, isDark && { borderTopColor: '#444' }]}>
+            <Text style={[s.brandingTitle, isDark && { color: '#D8B4FE' }]}>{t.company}</Text>
+            <Text style={s.brandingSub}>{t.companyDesc}</Text>
+          </View>
         </View>
-      </View>
-    </ScrollView>
-    </SafeAreaView>
-    </SafeAreaView>
+      </ScrollView>
     </SafeAreaView>
   );
 }

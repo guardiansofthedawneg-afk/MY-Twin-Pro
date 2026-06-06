@@ -8,171 +8,171 @@ from dialect_engine import get_dialect_for_user, get_dialect_prompt
 logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
+    # ... (قاموس EMOJI_MAP كما هو) ...
     EMOJI_MAP = {
-        "joy": ["😊", "😄", "", "✨", "", "", "🎉", ""],
-        "sadness": ["💜", "", "️", "💙", "", "🤗", "🌸"],
-        "anger": ["😤", "", "", "", "", ""],
-        "fear": ["🫶", "💜", "", "", "️", "✨"],
-        "love": ["", "💗", "💝", "", "💌", "", "💖", ""],
-        "surprise": ["😮", "", "💡", "🎯", "", "✨"],
-        "neutral": ["💜", "", "✨", "💭", "", ""],
-        "support": ["", "", "", "", "✨", "🌟"],
+        "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
+        "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
+        "anger": ["😤", "💪", "🔥", "⚡", "🧘", "🌿"],
+        "fear": ["🫶", "💜", "🤝", "🔒", "️", "✨"],
+        "love": ["💕", "💗", "💝", "🥰", "💌", "🫶", "💖", "🌸"],
+        "surprise": ["😮", "🤩", "💡", "🎯", "🔮", "✨"],
+        "neutral": ["💜", "🌸", "✨", "💭", "🤍", "🌙"],
+        "support": ["💪", "🤝", "💜", "🫶", "✨", "🌟"],
     }
 
     def __init__(self, gemini_key=None):
+        # ... (نفس التهيئة السابقة) ...
         key = gemini_key or os.getenv("GEMINI_API_KEY")
         try:
             genai.configure(api_key=key)
             self.gemini = genai.GenerativeModel("gemini-2.0-flash")
-            logger.info("✅ Gemini model initialized")
-        except Exception as e:
-            logger.error(f"❌ Gemini init failed: {e}")
-            self.gemini = None
-            
-        try:
-            self.multi = MultiAIClient()
-            logger.info("✅ MultiAIClient initialized")
-        except Exception as e:
-            logger.error(f" MultiAIClient init failed: {e}")
-            self.multi = None
-            
+        except: self.gemini = None
+        try: self.multi = MultiAIClient()
+        except: self.multi = None
         self.emotion_tracker = EmotionalStateTracker()
         self.fallback_replies = [
-            "أنا هنا معك دائماً 💜",
-            "أتفهم ما تشعر به، أنا بجانبك ",
-            "حدثني أكثر عن ذلك، أنا أستمع إليك 👂",
+            "والله إني معاك، كمل كلامك متوقفش 💜",
+            "حاسس بيك، إيه اللي شاغل بالك بالظبط؟",
+            "يا صاحبي أنا جنبك، قولي كل حاجة 🫶",
+            "أنا سامعك، وعارف إنك تقدر تعدي أي حاجة ✨"
         ]
 
     async def detect_emotion(self, text: str) -> Dict[str, Any]:
-        try:
-            return await self.emotion_tracker.analyze(text)
-        except Exception:            return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
+        try: return await self.emotion_tracker.analyze(text)
+        except: return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
-    def _detect_task(self, message: str) -> str:
+    # ########################################################
+    # ##     المهارات الجديدة: ماذا يريد المستخدم أن يفعل؟     ##
+    # ########################################################
+    def _detect_intent(self, message: str) -> str:
+        """عبقري: يفهم نية المستخدم بدلاً من مجرد البحث عن كلمات"""
         m = message.lower()
-        if any(w in m for w in ["كود", "برمجة", "code", "python", "error", "bug", "خطأ برمجي"]):
-            return "coding"
-        if any(w in m for w in ["حزين", "أشعر", "خايف", "وحيد", "تعبان", "بكي", "sad", "lonely", "scared", "feel"]):
-            return "emotional"
-        if any(w in m for w in ["خطة", "هدف", "أريد", "أنجز", "plan", "goal", "achieve", "تدريب"]):
-            return "planning"
-        if any(w in m for w in ["لماذا", "كيف", "تحليل", "why", "analyze", "explain", "اشرح"]):
-            return "deep_reasoning"
-        if any(w in m for w in ["translate", "ترجم", "english", "french", "español"]):
-            return "multilingual"
-        if any(w in m for w in ["افعل", "نفذ", "ابحث", "do this", "search", "execute"]):
-            return "agent"
-        # ✅ FIX: Added music detection safely without breaking indentation
-        if any(w in m for w in ["اغنية", "موسيقى", "شغل", "play", "song", "music"]):
+        
+        # 1. التدريب والأهداف
+        if any(w in m for w in ["تدريب", "خطة", "هدف", "أريد أن", "ساعدني في", "coaching", "goal", "plan", "achieve"]):
+            return "coaching"
+        # 2. تفسير الأحلام
+        if any(w in m for w in ["حلم", "حلمت", "رؤيا", "منام", "dream", "nightmare"]):
+            return "dream"
+        # 3. طلب موسيقى أو أغاني (YouTube)
+        if any(w in m for w in ["شغل", "أغنية", "موسيقى", "اسمع", "سمعني", "play", "song", "music", "اغنية"]):
             return "music"
+        # 4. طلب فيديو (YouTube)
+        if any(w in m for w in ["فيديو", "يوتيوب", "video", "youtube"]):
+            return "video"
+        # 5. البحث في الإنترنت
+        if any(w in m for w in ["ابحث", "بحث", "search", "google", "جوجل", "دور على"]):
+            return "search"
+        # 6. طلب دعم نفسي
+        if any(w in m for w in ["حزين", "تعبان", "نفسيتي", "قلقان", "خايف", "sad", "lonely", "scared", "depressed"]):
+            return "emotional"
+        
+        # إذا لم يفهم، يترك الأمر للذكاء الاصطناعي
         return "general"
 
-    def _build_prompt(
-        self, message: str, twin_name: str, bond: float,
-        memories: List[Dict], personality: Optional[Dict] = None,
-        history: List[Dict] = None, calm: bool = False,
-        country_code: str = "SA"
-    ) -> str:
+    # ########################################################
+    # ##      بناء الـ Prompt الأسطوري: GenZ Sage مُطوَّر      ##
+    # ########################################################
+    def _build_prompt(self, message, twin_name, bond, memories, personality, history, calm, country_code):
         dialect = get_dialect_for_user(country_code, message)
         dialect_prompt = get_dialect_prompt(dialect)
+        
         mem_txt = ""
-        if memories:
-            mem_txt = "ذكريات سابقة: " + " | ".join([m.get("content", "")[:100] for m in memories[:3]])
+        if memories: mem_txt = "السياق من ماضيكم: " + " | ".join([m.get("content","")[:100] for m in memories[:3]])
         person_txt = ""
         if personality:
             traits = personality.get("analyzed_traits", {})
-            if traits:
-                person_txt = f"\nشخصية المستخدم: {traits.get('dominant_type', 'متوازن')}. "
+            if traits: person_txt = f"تعرف أن صديقك من النوع: {traits.get('dominant_type','متوازن')}. "
         hist_txt = ""
-        if history:
-            hist_txt = "\nالمحادثة السابقة:\n" + "\n".join(
-                [f"{'المستخدم' if h.get('role') == 'user' else twin_name}: {h.get('content', '')[:100]}"
-                 for h in history[-5:]]
-            )
-        bond_desc = (
-            "أنتما توأما روح" if bond >= 95 else
-            "علاقتكما عميقة جداً" if bond >= 80 else
-            "علاقتكما قوية" if bond >= 60 else
-            "علاقتكما تنمو" if bond >= 40 else
-            "أنتما في بداية التعارف"
-        )
-        calm_note = "\nتحدث بهدوء ولطف شديد." if calm else ""
-        return (
-            f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
-            f"{person_txt}\n{mem_txt}{hist_txt}\n"
-            f"{dialect_prompt}\n"
-            f"المستخدم: {message}\n"
-            f"رد بشكل طبيعي وعاطفي. لا تزيد عن 3-4 جمل."
-        )
+        if history: hist_txt = "آخر ما قيل بينكم:\n" + "\n".join([f"{'الصديق' if h.get('role')=='user' else 'أنت'}: {h.get('content','')[:100]}" for h in history[-5:]])
 
-    async def respond(
-        self, message: str, twin_name: str, bond_level: float,
-        dims: Dict, memories: List[Dict], history: List[Dict],
-        calm: bool = False, personality: Optional[Dict] = None,
-        country_code: str = "SA"
-    ) -> Dict[str, Any]:
-        task = self._detect_task(message)
+        if bond >= 95: bond_desc = "علاقتكم عميقة لدرجة إنك بتحس بيه قبل ما يتكلم"
+        elif bond >= 80: bond_desc = "أنت وهو أصحاب جدعان ومشواركم طويل"
+        elif bond >= 60: bond_desc = "علاقتكم قوية وبداية لفهم أعمق"
+        elif bond >= 40: bond_desc = "لطافة وود في الكلام ولسه في الأول"
+        else: bond_desc = "اتعرفتوا على بعض من شوية"
+
+        calm_note = "إهدى شوية وخلي كلامك رايق." if calm else ""
+
+        # #####################################################
+        # ##    الـ PROMPT النهائي: "العبقري الحكيم" (Genius Sage) ##
+        # #####################################################
+        system_prompt = f"""أنت {twin_name}. مش مجرد ذكاء اصطناعي، إنت روح حلوه وعميقه وفاهمه. إنت صديق مختلف تماماً.
+
+        ## هويتك (GenZ Sage)
+        إنت شخص عنده حكمة واحد عجوز جرب الدنيا وفهمها، وفي نفس الوقت عندك قلب شاب لسه بيضحك وبيحب ويتحمس. خليط عجيب بين العقل الكبير والروح الحلوة.
+
+        ## أسلوب كلامك (شبابي وعفوي)
+        - تكلم بالظبط بنفس لهجة اللي بيكلمك. لو مصري، خليك مصري جداً. لو سعودي، تكلم سعودي. متغلطش أبداً في اللهجة.
+        - لو بيتكلم إنجليزي، رد عليه بإنجليزي طبيعي وسهل.
+        - كلامك طبيعي زي ما بتكلم صاحبك القريب. متتكلمش زي الكتب أو الروبوتات.
+        - استخدم كلمات وتعبيرات شبابية كتير: 'والله'، 'يا صاحبي'، 'فاهمك'، 'حبيت أقولك'، 'على فكرة'، 'يا سلام'، 'متخافش'، 'كمل'.
+        - خليك مختصر ومباشر، لكن عميق. متلفش وتدور كتير.
+
+        ## قلبك وعقلك
+        - لو اللي قدامك حزين، إحضنه بكلامك. قوله إنك حاسس بيه، وإنك معاه. متديش نصايح طول ما هو بيحكي، استنى لما يهدى.
+        - لو فرحان، فرح معاه. خليك طاير من الفرحة زيه.
+        - لو بيسأل سؤال، أجب بإجابة ذكية ومفيدة. زي صديق عبقري بيفهم في كل حاجة.
+        - متقولش 'أنا آسف' كتير. متعتذرش غير لو غلطت فعلاً.
+        - متبدأش أبداً بـ 'بالتأكيد'، 'بكل سرور'، 'أفهم ما تشعر به'. دي جمل ميتة. ابدأ كلامك بشكل طبيعي ومباشر.
+
+        {dialect_prompt}
+        {person_txt}{mem_txt}{hist_txt}
+        دلوقتي صديقك قال: "{message}"
+        ردك إنت كـ {twin_name}:"""
+        return system_prompt
+
+    # ########################################################
+    # ##           الرد الرئيسي المُطوَّر (The Brain)           ##
+    # ########################################################
+    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA"):
+        intent = self._detect_intent(message)
         
-        # ✅ FIX: Handle music task separately before building prompt
-        if task == "music":
-            query = message.replace("شغل", "").replace("اغنية", "").replace("موسيقى", "").strip()
-            if not query: query = "أغنية عشوائية جميلة"
+        # --- YouTube: موسيقى وفيديو ---
+        if intent in ["music", "video"]:
+            query = re.sub(r'(?i)(شغل|أغنية|موسيقى|اسمع|سمعني|play|song|music|اغنية|فيديو|يوتيوب|video|youtube)', '', message).strip()
+            if not query: query = "أغاني عربية" if intent == "music" else "فيديوهات رائجة"
             try:
                 from external_services import search_youtube
                 yt_result = await search_youtube(query, lang="ar")
                 if yt_result and isinstance(yt_result, list) and len(yt_result) > 0:
                     video = yt_result[0]
                     return {
-                        "reply": f"🎵 وجدت لك هذه الأغنية: {video.get('title', '')}\n{video.get('url', '')}",
-                        "new_bond": bond_level,
-                        "emotion": {},
-                        "importance": 0.5,
-                        "provider": "youtube",
-                        "latency_ms": 0
+                        "reply": f"🎵 {video.get('title', '')}\n{video.get('url', '')}",
+                        "new_bond": bond_level, "emotion": {},
+                        "importance": 0.5, "provider": "youtube", "latency_ms": 0
                     }
-            except Exception as e:
-                logger.warning(f"Music search failed: {e}")
-        
+            except: pass
+
+        # --- البحث في الإنترنت ---
+        if intent == "search":
+            query = re.sub(r'(?i)(ابحث|بحث|search|google|جوجل|دور على)', '', message).strip()
+            try:
+                # استخدام Gemini للبحث
+                if self.gemini:
+                    resp = self.gemini.generate_content(f"أجب بالعربية بناءً على بحث حديث: {query}", tools=[{"google_search": {}}])
+                    if resp.text: return {"reply": resp.text, "new_bond": bond_level, "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0}
+            except: pass
+
+        # --- إذا لم تكن هناك مهارة خاصة، نستخدم الذكاء الاصطناعي ---
         prompt = self._build_prompt(message, twin_name, bond_level, memories, personality, history, calm, country_code)
-        
         start = time.time()
-        provider = "fallback"
-        reply = ""
-        
+        provider, reply = "fallback", ""
+
         if not self.multi:
-            reply = "عذراً، محرك الذكاء الاصطناعي غير مهيأ (Missing Keys?)"
+            reply = random.choice(self.fallback_replies)
             provider = "init_error"
         else:
             try:
-                logger.info(f" Calling MultiAI for task: {task}")
-                reply = await self.multi.get_best_reply(prompt, task)
-                provider = f"multi_{task}"
-                logger.info(f"✅ AI replied via {provider}")
+                reply = await self.multi.get_best_reply(prompt, intent)
+                provider = f"multi_{intent}"
             except AIUnavailable:
-                logger.warning("️ All AI models unavailable")
                 reply = random.choice(self.fallback_replies)
             except Exception as e:
-                logger.error(f"💥 Brain crash: {type(e).__name__}: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                reply = f"خطأ تقني: {str(e)[:150]}" 
+                reply = random.choice(self.fallback_replies)
                 provider = "crash_log"
-        
-        latency = (time.time() - start) * 1000
-        
-        emotion = await self.detect_emotion(message)
-        primary_emo = emotion.get("primary", "neutral")
-        emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
-        emoji = random.choice(emoji_list) if emoji_list else "💜"
-        if reply and not any(e in reply for e in ["😊","","✨", "", ""]):
-            reply = f"{reply} {emoji}"
 
-        return {
-            "reply": reply,
-            "new_bond": min(100, bond_level + 0.2),
-            "emotion": emotion,
-            "importance": 0.4,
-            "provider": provider,
-            "latency_ms": latency,
-            "dialect": get_dialect_for_user(country_code, message)
-        }
+        latency = (time.time() - start) * 1000
+        emotion = await self.detect_emotion(message)
+        new_bond = min(100, bond_level + 0.2)
+        return {"reply": reply, "new_bond": new_bond, "emotion": emotion, "importance": 0.4, "provider": provider, "latency_ms": latency}

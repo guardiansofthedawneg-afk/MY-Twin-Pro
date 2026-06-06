@@ -1,21 +1,47 @@
 """
-MyTwin Voice Engine v4.1 - Final Production
-TTS: Edge TTS (مجاني: Free/Plus) + ElevenLabs (Premium/Pro/Yearly)
-STT: Google STT (مجاني 60 دقيقة) → Whisper (مدفوع لكن رخيص)
+MyTwin Voice Engine v4.2 – Clean & Integrated
+- TTS: Edge TTS (all paid tiers) + ElevenLabs (premium/pro/yearly)
+- STT: Google STT → Whisper fallback
+- Voice selection driven by dialect_engine (country → neural voice)
 """
-import os
-import asyncio
-import base64
-import re
-import tempfile
+import os, asyncio, base64, re, tempfile, logging
 from typing import Optional, Literal
 import httpx
 import edge_tts
-import logging
+
+# -------- dialect-aware voice map ----------
+from dialect_engine import get_voice_dialect  # country_code -> ar-EG, en-US, etc.
 
 logger = logging.getLogger(__name__)
 
-# ========== إعدادات الصوت حسب العاطفة ==========
+# ========== Edge TTS neural voices ==========
+# key = voice_dialect_code (from get_voice_dialect)
+VOICES = {
+    "ar-SA": {"female": "ar-SA-ZariyahNeural", "male": "ar-SA-HamedNeural"},
+    "ar-EG": {"female": "ar-EG-SalmaNeural",   "male": "ar-EG-ShakirNeural"},
+    "ar-AE": {"female": "ar-AE-FatimaNeural",  "male": "ar-AE-HamdanNeural"},
+    "ar-KW": {"female": "ar-KW-NouraNeural",   "male": "ar-KW-FahadNeural"},
+    "ar-QA": {"female": "ar-QA-MozaNeural",    "male": "ar-QA-JassimNeural"},
+    "ar-BH": {"female": "ar-BH-LailaNeural",   "male": "ar-BH-AliNeural"},
+    "ar-OM": {"female": "ar-OM-AishaNeural",   "male": "ar-OM-AbdullahNeural"},
+    "ar-JO": {"female": "ar-JO-SanaNeural",    "male": "ar-JO-TariqNeural"},
+    "ar-LB": {"female": "ar-LB-LaylaNeural",   "male": "ar-LB-NajiNeural"},
+    "ar-SY": {"female": "ar-SY-AmalNeural",    "male": "ar-SY-OmarNeural"},
+    "ar-IQ": {"female": "ar-IQ-RanaNeural",    "male": "ar-IQ-BassamNeural"},
+    "ar-YE": {"female": "ar-YE-MaryamNeural",  "male": "ar-YE-SalehNeural"},
+    "ar-PS": {"female": "ar-PS-IsraaNeural",   "male": "ar-PS-LaithNeural"},
+    "ar-MA": {"female": "ar-MA-MounaNeural",   "male": "ar-MA-JamalNeural"},
+    "ar-DZ": {"female": "ar-DZ-AminaNeural",   "male": "ar-DZ-MohamedNeural"},
+    "ar-TN": {"female": "ar-TN-OnsNeural",     "male": "ar-TN-HichemNeural"},
+    "ar-LY": {"female": "ar-LY-ImanNeural",    "male": "ar-LY-OmarNeural"},
+    "ar-SD": {"female": "ar-SD-HananNeural",   "male": "ar-SD-MaherNeural"},
+    "en-US": {"female": "en-US-JennyNeural",   "male": "en-US-GuyNeural"},
+    "en-GB": {"female": "en-GB-LibbyNeural",   "male": "en-GB-RyanNeural"},
+    "en-CA": {"female": "en-CA-ClaraNeural",   "male": "en-CA-LiamNeural"},
+    "en-AU": {"female": "en-AU-NatashaNeural", "male": "en-AU-WilliamNeural"},
+}
+
+# ========== Emotion parameter mapping ==========
 EMOTION_PARAMS = {
     "neutral":   {"rate": "+0%",  "pitch": "+0Hz"},
     "happy":     {"rate": "+10%", "pitch": "+20Hz"},
@@ -26,29 +52,12 @@ EMOTION_PARAMS = {
     "loving":    {"rate": "-5%",  "pitch": "+10Hz"},
 }
 
-# ========== أصوات Edge TTS (مجاني) ==========
-VOICES = {
-    'ar': {
-        'female': 'ar-SA-ZariyahNeural',
-        'male': 'ar-SA-HamedNeural',
-    },
-    'ar-EG': {
-        'female': 'ar-EG-SalmaNeural',
-        'male': 'ar-EG-ShakirNeural',
-    },
-    'en': {
-        'female': 'en-US-JennyNeural',
-        'male': 'en-US-GuyNeural',
-    },
-}
-
-# ========== مفاتيح API ==========
+# ========== API keys ==========
 ELEVENLABS_KEY = os.getenv("ELEVENLABS_API_KEY", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")  # لـ Whisper
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")   # Whisper
 GOOGLE_STT_KEY = os.getenv("GOOGLE_STT_KEY", "")
 
-# ========== TTS ==========
-
+# ========== helpers ==========
 def _clean_text(text: str) -> str:
     emoji_pattern = re.compile(
         "["
@@ -61,22 +70,27 @@ def _clean_text(text: str) -> str:
     text = re.sub(r'http\S+', 'رابط', text)
     return text.strip()
 
+# ========== TTS ==========
 async def _edge_tts(
-    text: str, lang: str = 'ar',
+    text: str,
+    voice_code: str = "ar-SA",
     gender: Literal['female', 'male'] = 'female',
     emotion: str = 'neutral'
 ) -> Optional[bytes]:
+    """Use Edge TTS with dialect-aware neural voice."""
     try:
         clean = _clean_text(text)
-        voice = VOICES.get(lang, VOICES['ar'])[gender]
+        # fallback if voice_code not in map
+        lang_map = VOICES.get(voice_code) or VOICES.get("ar-SA")
+        voice_name = lang_map[gender]
         config = EMOTION_PARAMS.get(emotion, EMOTION_PARAMS['neutral'])
-        
-        communicate = edge_tts.Communicate(clean, voice, rate=config['rate'], pitch=config['pitch'])
-        
+        communicate = edge_tts.Communicate(
+            clean, voice_name,
+            rate=config['rate'], pitch=config['pitch']
+        )
         with tempfile.NamedTemporaryFile(delete=False, suffix='.mp3') as tmp:
             audio_path = tmp.name
         await communicate.save(audio_path)
-        
         with open(audio_path, 'rb') as f:
             audio_bytes = f.read()
         os.unlink(audio_path)
@@ -91,7 +105,6 @@ async def _elevenlabs_tts(text: str, gender: str = 'female') -> Optional[bytes]:
     try:
         clean = _clean_text(text)
         voice_id = "21m00Tcm4TlvDq8ikWAM" if gender == 'female' else "ErXwobaYiN019PkySvjV"
-        
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}",
@@ -112,26 +125,29 @@ async def _elevenlabs_tts(text: str, gender: str = 'female') -> Optional[bytes]:
         return None
 
 async def speakResponse(
-    text: str, tier: str = 'free',
-    lang: str = 'ar', gender: Literal['female', 'male'] = 'female',
+    text: str,
+    tier: str = 'free',
+    country_code: str = "SA",
+    gender: Literal['female', 'male'] = 'female',
     emotion: str = 'neutral'
 ) -> Optional[bytes]:
     """
-    TTS حسب الباقة:
-    - Free, Plus: Edge TTS (مجاني، عالي الجودة)
-    - Premium, Pro, Yearly: ElevenLabs (أفضل جودة صوتية)
+    TTS entry point used by twin_brain.
+    - Free / Plus → Edge TTS (free, high quality)
+    - Premium / Pro / Yearly → ElevenLabs (best quality) with Edge fallback
     """
+    # high-tier → try ElevenLabs first
     if tier in ['premium', 'pro', 'yearly']:
         result = await _elevenlabs_tts(text, gender)
         if result:
             return result
         logger.warning("ElevenLabs failed, falling back to Edge TTS")
-    
-    # Edge TTS لـ Free و Plus وكاحتياطي للباقات الأعلى
-    return await _edge_tts(text, lang, gender, emotion)
+
+    # Edge TTS for everyone else (and as fallback)
+    voice_code = get_voice_dialect(country_code)   # e.g. "ar-EG"
+    return await _edge_tts(text, voice_code, gender, emotion)
 
 # ========== STT ==========
-
 async def _google_stt(audio_bytes: bytes) -> Optional[str]:
     if not GOOGLE_STT_KEY:
         return None
@@ -158,7 +174,7 @@ async def _google_stt(audio_bytes: bytes) -> Optional[str]:
                 transcript = ""
                 for result in results:
                     transcript += result['alternatives'][0]['transcript'] + " "
-                return transcript.strip() if transcript.strip() else None
+                return transcript.strip() or None
             logger.error(f"Google STT: {resp.status_code}")
             return None
     except Exception as e:
@@ -186,28 +202,26 @@ async def _whisper_stt(audio_bytes: bytes) -> Optional[str]:
         return None
 
 def startRecordingVoice() -> bool:
-    return True
+    """Return True if STT is available (keys are set)."""
+    return bool(GOOGLE_STT_KEY or OPENAI_API_KEY)
 
 async def stopRecordingVoice(audio_bytes: Optional[bytes] = None) -> Optional[str]:
     if not audio_bytes:
         return None
-    
     result = await _google_stt(audio_bytes)
     if result:
         return result
-    
     logger.info("Google STT failed, falling back to Whisper")
     return await _whisper_stt(audio_bytes)
 
-# ========== للتوافق مع الكود القديم ==========
-
+# ========== legacy compatibility wrapper ==========
 class EmotionalVoiceEngine:
     def __init__(self):
         pass
-    
-    async def synthesize(self, text, tier='free', emotion='neutral', language='ar', gender='female'):
-        return await speakResponse(text, tier, language, gender, emotion)
-    
+
+    async def synthesize(self, text, tier='free', emotion='neutral', language='ar', gender='female', country_code='SA'):
+        return await speakResponse(text, tier, country_code, gender, emotion)
+
     def get_tts_params(self, emotion, calm=False):
         if calm:
             return {"pitch": 0.80, "rate": 0.70}

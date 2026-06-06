@@ -1,66 +1,38 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Linking } from 'react-native';
-import { COLORS, FONTS } from '../utils/theme';
+import { SafeAreaView, View, Text, StyleSheet, ScrollView } from 'react-native';
+import { useTwinStore } from '../store/useTwinStore';
+import { Info, Heart } from 'lucide-react-native';
 
 export default function About() {
-  const lang = 'ar';
+  const { lang, theme } = useTwinStore();
+  const isAr = lang === 'ar';
+  const isDark = theme === 'dark';
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      <Text style={styles.title}>{lang === 'ar' ? 'ℹ️ عن التطبيق' : 'ℹ️ About'}</Text>
-
-      {/* معلومات الإصدار */}
-      <View style={styles.card}>
-        <Text style={styles.label}>{lang === 'ar' ? 'الإصدار' : 'Version'}</Text>
-        <Text style={styles.value}>v6.3.0</Text>
-        <Text style={styles.label}>{lang === 'ar' ? 'آخر تحديث' : 'Last Updated'}</Text>
-        <Text style={styles.value}>2026</Text>
-      </View>
-
-      {/* الفريق */}
-      <Text style={styles.sectionTitle}>{lang === 'ar' ? 'الفريق' : 'Team'}</Text>
-      <View style={styles.card}>
-        <Text style={styles.companyName}>Soul Sync Ltd.</Text>
-        <Text style={styles.companyDesc}>{lang === 'ar' ? 'شركة ذكاء اصطناعي رائدة تهدف إلى القضاء على الوحدة الرقمية من خلال رفيق ذكي يتفهمك حقاً.' : 'A leading AI company dedicated to eradicating digital loneliness through intelligent companions that truly understand you.'}</Text>
-      </View>
-
-      {/* الروابط */}
-      <Text style={styles.sectionTitle}>{lang === 'ar' ? 'الروابط' : 'Links'}</Text>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://mytwin.ai')}>
-        <Text style={styles.linkText}>🌐 mytwin.ai</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://instagram.com/mytwin_ai')}>
-        <Text style={styles.linkText}>📸 Instagram</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://tiktok.com/@mytwin_ai')}>
-        <Text style={styles.linkText}>🎵 TikTok</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://linkedin.com/company/soulsync')}>
-        <Text style={styles.linkText}>💼 LinkedIn</Text>
-      </TouchableOpacity>
-
-      {/* السياسات */}
-      <Text style={styles.sectionTitle}>{lang === 'ar' ? 'السياسات' : 'Policies'}</Text>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://mytwin.ai/terms')}>
-        <Text style={styles.linkText}>📋 {lang === 'ar' ? 'شروط الاستخدام' : 'Terms of Service'}</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.linkBtn} onPress={() => Linking.openURL('https://mytwin.ai/privacy')}>
-        <Text style={styles.linkText}>🔒 {lang === 'ar' ? 'سياسة الخصوصية' : 'Privacy Policy'}</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.copyright}>©️ 2026 Soul Sync Ltd. {lang === 'ar' ? 'جميع الحقوق محفوظة' : 'All rights reserved.'}</Text>
-    </ScrollView>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+      <ScrollView style={s.container} contentContainerStyle={{ padding: 20 }}>
+        <Info size={48} stroke={isDark ? '#D8B4FE' : '#6B21A8'} style={{ alignSelf: 'center', marginBottom: 16 }} />
+        <Text style={[s.title, isDark && { color: '#FFF' }]}>MyTwin</Text>
+        <Text style={[s.version, isDark && { color: '#CCC' }]}>v1.0.0</Text>
+        <Text style={[s.body, isDark && { color: '#CCC' }]}>
+          {isAr
+            ? 'MyTwin هو أول رفيق ذكي عربي يحاكي الوعي البشري، يبني علاقة عاطفية حقيقية مع المستخدم عبر 6 مراحل (من "غريب" إلى "توأم روح"). يدمج بين قدرات المساعد الشخصي والذكاء العاطفي العميق.'
+            : 'MyTwin is the first Arabic AI companion that simulates human consciousness, building a real emotional relationship with the user across 6 stages (from "Stranger" to "Soulmate"). It combines personal assistant capabilities with deep emotional intelligence.'}
+        </Text>
+        <View style={[s.footer, isDark && { borderTopColor: '#444' }]}>
+          <Heart size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+          <Text style={[s.footerText, isDark && { color: '#D8B4FE' }]}>Soul Sync Ltd. © 2026</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.bg, padding: 16 },
-  title: { fontSize: FONTS.title, fontWeight: '800', color: COLORS.text, marginBottom: 24 },
-  sectionTitle: { fontSize: FONTS.subtitle, fontWeight: '700', color: COLORS.text, marginTop: 24, marginBottom: 12 },
-  card: { backgroundColor: COLORS.card, padding: 16, borderRadius: 14, marginBottom: 12, borderWidth: 1, borderColor: COLORS.border },
-  label: { color: COLORS.textSecondary, fontSize: FONTS.small, marginBottom: 4 },
-  value: { color: COLORS.text, fontSize: FONTS.body, fontWeight: '600', marginBottom: 10 },
-  companyName: { color: COLORS.primary, fontSize: FONTS.subtitle, fontWeight: '700', marginBottom: 8 },
-  companyDesc: { color: COLORS.textSecondary, fontSize: FONTS.body, lineHeight: 22 },
-  linkBtn: { backgroundColor: COLORS.card, padding: 14, borderRadius: 10, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border },
-  linkText: { color: COLORS.text, fontSize: FONTS.body },
-  copyright: { textAlign: 'center', color: COLORS.textSecondary, fontSize: FONTS.tiny, marginTop: 32 },
+const s = StyleSheet.create({
+  safe: { flex: 1 },
+  container: { flex: 1, backgroundColor: '#F8F6F2' },
+  title: { fontSize: 28, fontWeight: '800', color: '#1A1A1A', textAlign: 'center', marginBottom: 4 },
+  version: { fontSize: 14, color: '#888', textAlign: 'center', marginBottom: 20 },
+  body: { fontSize: 15, lineHeight: 24, color: '#444', textAlign: 'center' },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 32, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E0D9F5' },
+  footerText: { fontSize: 14, color: '#6B21A8', fontWeight: '600' },
 });

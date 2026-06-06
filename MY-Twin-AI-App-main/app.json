@@ -70,7 +70,8 @@
             "deploymentTarget": "15.1"
           }
         }
-      ]
+      ],
+      "expo-localization"
     ],
     "extra": {
       "router": {

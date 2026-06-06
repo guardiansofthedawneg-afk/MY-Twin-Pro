@@ -22,7 +22,7 @@ interface TwinStore {
   updateBond: (newBond: number) => void;
   updateRelationshipDims: (dims: Partial<RelationshipDims>) => void;
   chatHistory: Message[];
-  addMessage: (role: 'user' | 'twin', content: string) => void;
+  addMessage: (role: 'user' | 'twin', content: string, image?: string) => void;
   clearHistory: () => void;
   calmMode: boolean; toggleCalmMode: () => void;
   theme: Theme; toggleTheme: () => void;

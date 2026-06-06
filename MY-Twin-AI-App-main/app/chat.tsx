@@ -5,11 +5,13 @@ import { router, Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
+import * as Localization from 'expo-localization';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
-import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera } from 'lucide-react-native';
+import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera, X } from 'lucide-react-native';
 
+// --- مكون الصورة الرمزية للتوأم ---
 function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
   const bg = isFemale ? '#E9D5FF' : '#DDD6FE';
@@ -21,6 +23,7 @@ function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
 }
 const avs = StyleSheet.create({ wrap: { justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 } });
 
+// --- مكون زر متحرك ---
 function AnimBtn({ onPress, style, children }: { onPress?: () => void; style?: any; children: React.ReactNode }) {
   const scale = useRef(new Animated.Value(1)).current;
   const handlePress = useCallback(() => {
@@ -38,6 +41,7 @@ function AnimBtn({ onPress, style, children }: { onPress?: () => void; style?: a
   );
 }
 
+// --- رسالة الترحيب ---
 function getWelcome(lang: 'ar' | 'en') {
   const h = new Date().getHours();
   if (lang === 'ar') {
@@ -52,6 +56,7 @@ function getWelcome(lang: 'ar' | 'en') {
   return { emoji: '🌃', text: 'Happy late night! Shall we talk?' };
 }
 
+// --- الاقتراحات السريعة ---
 function getSuggestions(lang: 'ar' | 'en') {
   if (lang === 'ar') return [
     { icon: Smile, label: 'دردشة', prompt: 'لنتحدث عن أي شيء' },
@@ -78,6 +83,8 @@ export default function Chat() {
   const [showAttach, setShowAttach] = useState(false);
   const [menuVisible, setMenuVisible] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [featureModal, setFeatureModal] = useState<{ visible: boolean; type: string }>({ visible: false, type: '' });
+  const [featureInput, setFeatureInput] = useState('');
   const flatRef = useRef<FlatList<ChatMessage>>(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const waveAnim = useRef(new Animated.Value(1)).current;
@@ -89,11 +96,12 @@ export default function Chat() {
   const isFree = tier === 'free';
   const isDark = theme === 'dark';
 
+  // --- التمرير التلقائي الذكي ---
   useEffect(() => {
-    InteractionManager.runAfterInteractions(() => {
+    const timer = setTimeout(() => {
       flatRef.current?.scrollToEnd({ animated: true });
-    });
-    Animated.timing(fadeAnim, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+    }, 150);
+    return () => clearTimeout(timer);
   }, [chatHistory]);
 
   useEffect(() => {
@@ -112,12 +120,15 @@ export default function Chat() {
   const openMenu = useCallback(() => { setMenuVisible(true); Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(); }, [slideAnim]);
   const closeMenu = useCallback(() => { Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true }).start(() => setMenuVisible(false)); }, [slideAnim]);
 
+  const countryCode = (Localization.region || 'SA').toUpperCase();
+
+  // --- دالة الإرسال المركزية (محسنة) ---
   const send = useCallback(async (msg?: string, imageBase64?: string) => {
     const message = (msg || input).trim();
     if (!message && !imageBase64) return;
     if (loading) return;
     triggerHaptic();
-    addMessage('user', message || '📷 صورة');
+    addMessage('user', message || '📷 صورة', imageBase64);
     setInput('');
     setLoading(true);
     try {
@@ -129,21 +140,39 @@ export default function Chat() {
         calm_mode: calmMode,
         lang,
         image: imageBase64 || undefined,
+      }, {
+        headers: {
+          'X-Calm-Mode': String(calmMode),
+          'X-Country-Code': countryCode,
+          'X-Twin-Gender': twinGender,
+        },
       });
       addMessage('twin', res.data.reply);
       updateBond(res.data.new_bond ?? bondLevel);
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
-      if (soundEnabled && res.data.tts) {
-        try { const { speakResponse } = require('../utils/voice_engine'); speakResponse(res.data.reply, { ...res.data.tts, gender: twinGender === 'female' ? 'female' : 'male' }); } catch (e) {}
+
+      if (soundEnabled && res.data?.tts) {
+        try {
+          const { speakResponse } = require('../utils/voice_engine');
+          await speakResponse(res.data.reply, {
+            tier: tier,
+            country_code: countryCode,
+            gender: twinGender,
+            emotion: res.data?.emotion?.primary || 'neutral',
+          });
+        } catch (e) {
+          console.log('TTS playback failed:', e);
+        }
       }
     } catch (error: any) {
       const status = error?.response?.status;
       if (status === 401) addMessage('twin', lang === 'ar' ? 'انتهت جلستك 🔒' : 'Session expired 🔒');
       else addMessage('twin', lang === 'ar' ? 'تعذر الاتصال 😔' : 'Connection failed 😔');
     } finally { setLoading(false); }
-  }, [input, loading, twinName, bondLevel, relationshipDims, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender]);
+  }, [input, loading, twinName, bondLevel, relationshipDims, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender, tier, countryCode]);
 
+  // --- الكاميرا ---
   const handleCamera = useCallback(async () => {
     setShowAttach(false);
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -154,6 +183,7 @@ export default function Chat() {
     }
   }, [send, lang]);
 
+  // --- الميكروفون ---
   const handleVoice = useCallback(async () => {
     if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة للباقات المدفوعة' : 'Feature for paid plans'); return; }
     try {
@@ -163,6 +193,7 @@ export default function Chat() {
     } catch (e) { Alert.alert('🎤', lang === 'ar' ? 'الصوت غير متاح' : 'Voice unavailable'); }
   }, [isRecording, lang, send, isFree]);
 
+  // --- إجراءات المرفقات (بما فيها النوافذ المنبثقة) ---
   const handleAttachAction = useCallback(async (action: string) => {
     setShowAttach(false);
     if (action === 'camera') { handleCamera(); return; }
@@ -176,11 +207,25 @@ export default function Chat() {
         const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
         if (!res.canceled && res.assets?.[0]) send('📄 ملف مرفق');
       } catch (e) { Alert.alert('خطأ', lang === 'ar' ? 'فشل اختيار الملف' : 'File selection failed'); }
-    } else if (action === 'search') setInput('/search ');
-    else if (action === 'coach') send(lang === 'ar' ? 'أريد جلسة تدريب' : 'Coaching session');
-    else if (action === 'dream') send(lang === 'ar' ? 'أريد تحليل حلمي' : 'Dream analysis');
-    else Alert.alert(lang === 'ar' ? 'ميزة' : 'Feature', lang === 'ar' ? 'قيد التطوير' : 'Coming soon');
+    } else if (action === 'search' || action === 'coach' || action === 'dream') {
+      setFeatureModal({ visible: true, type: action });
+      setFeatureInput('');
+    } else {
+      Alert.alert(lang === 'ar' ? 'ميزة' : 'Feature', lang === 'ar' ? 'قيد التطوير' : 'Coming soon');
+    }
   }, [send, lang, handleCamera]);
+
+  const handleFeatureSend = () => {
+    const prompts: Record<string, string> = {
+      search: '/search ',
+      coach: lang === 'ar' ? 'أريد جلسة تدريب: ' : 'Coaching session: ',
+      dream: lang === 'ar' ? 'أريد تحليل حلمي: ' : 'Dream analysis: ',
+    };
+    const prefix = prompts[featureModal.type] || '';
+    send(prefix + featureInput);
+    setFeatureModal({ visible: false, type: '' });
+    setFeatureInput('');
+  };
 
   const renderMsg = useCallback(({ item, index }: ListRenderItemInfo<ChatMessage>) => {
     const isUser = item.role === 'user';
@@ -229,6 +274,7 @@ export default function Chat() {
     <View style={[s.root, { paddingTop: insets.top, backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#1A1A1A' : '#FFFFFF'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {/* الهيدر */}
         <View style={[s.header, isDark && { backgroundColor: '#1A1A1A', borderBottomColor: '#333' }]}>
           <View style={s.headerLeft}>
             <AnimBtn onPress={openMenu} style={s.menuBtn}><Menu size={22} stroke={isDark ? '#FFF' : '#1A1A1A'} /></AnimBtn>
@@ -256,8 +302,10 @@ export default function Chat() {
           </View>
         </View>
 
+        {/* قائمة المحادثة */}
         <FlatList ref={flatRef} data={chatHistory} keyExtractor={(_, i) => i.toString()} renderItem={renderMsg} ListEmptyComponent={ListEmpty} contentContainerStyle={s.listContent} onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })} removeClippedSubviews initialNumToRender={15} />
 
+        {/* مؤشر الكتابة */}
         {loading && (
           <View style={s.typingRow}>
             <TwinAvatar gender={twinGender} size={22} />
@@ -267,6 +315,7 @@ export default function Chat() {
           </View>
         )}
 
+        {/* شريط الإدخال */}
         <View style={[s.inputBar, { paddingBottom: insets.bottom + 8 }, isDark && { backgroundColor: '#1A1A1A', borderTopColor: '#333' }]}>
           <AnimBtn onPress={() => setShowAttach(true)} style={s.iconBtn}><Paperclip size={20} stroke={isDark ? '#D8B4FE' : '#999'} /></AnimBtn>
           {!isFree && (
@@ -291,6 +340,7 @@ export default function Chat() {
           ) : <View style={{ width: 42 }} />}
         </View>
 
+        {/* القائمة الجانبية */}
         <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
           <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={closeMenu}>
             <Animated.View style={[s.sidebar, { transform: [{ translateX: slideAnim }] }, isDark && { backgroundColor: '#1A1A1A' }]}>
@@ -299,6 +349,7 @@ export default function Chat() {
           </TouchableOpacity>
         </Modal>
 
+        {/* قائمة المرفقات */}
         <Modal visible={showAttach} transparent animationType="none" onRequestClose={() => setShowAttach(false)}>
           <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setShowAttach(false)}>
             <Animated.View style={[s.attachMenu, { transform: [{ translateY: attachTranslateY }], opacity: attachOpacity }, isDark && { backgroundColor: '#2A2A2A' }]}>
@@ -317,6 +368,36 @@ export default function Chat() {
               </AnimBtn>
             </Animated.View>
           </TouchableOpacity>
+        </Modal>
+
+        {/* نافذة الميزات المنبثقة (بحث، تدريب، أحلام) */}
+        <Modal visible={featureModal.visible} transparent animationType="fade" onRequestClose={() => setFeatureModal({ visible: false, type: '' })}>
+          <View style={s.featureOverlay}>
+            <View style={[s.featureContainer, isDark && { backgroundColor: '#2A2A2A' }]}>
+              <View style={s.featureHeader}>
+                <Text style={[s.featureTitle, isDark && { color: '#FFF' }]}>
+                  {featureModal.type === 'search' ? (lang === 'ar' ? 'بحث' : 'Search') :
+                   featureModal.type === 'coach' ? (lang === 'ar' ? 'تدريب' : 'Coaching') :
+                   (lang === 'ar' ? 'تفسير أحلام' : 'Dream Analysis')}
+                </Text>
+                <TouchableOpacity onPress={() => setFeatureModal({ visible: false, type: '' })}>
+                  <X size={22} stroke={isDark ? '#CCC' : '#666'} />
+                </TouchableOpacity>
+              </View>
+              <TextInput
+                style={[s.featureInput, isDark && { backgroundColor: '#333', color: '#FFF', borderColor: '#555' }]}
+                placeholder={lang === 'ar' ? 'اكتب طلبك هنا...' : 'Type your request...'}
+                placeholderTextColor="#999"
+                value={featureInput}
+                onChangeText={setFeatureInput}
+                multiline
+                autoFocus
+              />
+              <TouchableOpacity style={s.featureSendBtn} onPress={handleFeatureSend}>
+                <Text style={s.featureSendText}>{lang === 'ar' ? 'إرسال' : 'Send'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </Modal>
       </KeyboardAvoidingView>
     </View>
@@ -365,4 +446,12 @@ const s = StyleSheet.create({
   attachMenu: { flexDirection: 'row', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, justifyContent: 'space-around', flexWrap: 'wrap', backgroundColor: '#FFF' },
   attachItem: { alignItems: 'center', gap: 6 },
   attachLabel: { fontSize: 12, color: '#666' },
+  // أنماط النافذة المنبثقة
+  featureOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  featureContainer: { width: '85%', backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
+  featureHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  featureTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
+  featureInput: { backgroundColor: '#F8F8F8', borderRadius: 12, padding: 14, fontSize: 15, minHeight: 80, textAlignVertical: 'top', marginBottom: 12, borderWidth: 1, borderColor: '#EFEFEF' },
+  featureSendBtn: { backgroundColor: '#6B21A8', padding: 14, borderRadius: 12, alignItems: 'center' },
+  featureSendText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
 });

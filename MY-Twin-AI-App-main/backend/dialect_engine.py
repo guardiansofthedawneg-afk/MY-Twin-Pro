@@ -1,102 +1,65 @@
+"""MyTwin - Dialect Engine v2.2
+يكتشف اللهجة من النص أولاً، ثم من الدولة كخطة بديلة.
+يجمع بين الدقة والسرعة والشمولية.
 """
-MyTwin – Dialect Engine v1.0
-تحديد اللهجة المناسبة للمستخدم بناءً على:
-1. الدولة (من إعدادات الهاتف)
-2. تحليل طريقة كلام المستخدم من رسائله
-"""
-from typing import Optional, Dict
+from typing import Dict
 
-# ========== قاموس الدول → اللهجات ==========
-COUNTRY_TO_DIALECT = {
-    # الدول العربية
-    "SA": "ar-SA",   # السعودية
-    "EG": "ar-EG",   # مصر
-    "AE": "ar-AE",   # الإمارات
-    "KW": "ar-KW",   # الكويت
-    "QA": "ar-QA",   # قطر
-    "BH": "ar-BH",   # البحرين
-    "OM": "ar-OM",   # عُمان
-    "JO": "ar-JO",   # الأردن
-    "LB": "ar-LB",   # لبنان
-    "SY": "ar-SY",   # سوريا
-    "IQ": "ar-IQ",   # العراق
-    "YE": "ar-YE",   # اليمن
-    "PS": "ar-PS",   # فلسطين
-    "MA": "ar-MA",   # المغرب
-    "DZ": "ar-DZ",   # الجزائر
-    "TN": "ar-TN",   # تونس
-    "LY": "ar-LY",   # ليبيا
-    "SD": "ar-SD",   # السودان
-    # الدول الأخرى
-    "US": "en-US",   # أمريكا
-    "GB": "en-GB",   # بريطانيا
-    "CA": "en-CA",   # كندا
-    "AU": "en-AU",   # أستراليا
-    "FR": "fr-FR",   # فرنسا
-    "DE": "de-DE",   # ألمانيا
-    "ES": "es-ES",   # إسبانيا
-    "IT": "it-IT",   # إيطاليا
-    "TR": "ar-TR",   # تركيا (جالية عربية)
+# ========== قاموس الدول → أكواد الصوت (لـ TTS فقط) ==========
+COUNTRY_TO_VOICE = {
+    "SA": "ar-SA", "EG": "ar-EG", "AE": "ar-AE", "KW": "ar-KW",
+    "QA": "ar-QA", "BH": "ar-BH", "OM": "ar-OM", "JO": "ar-JO",
+    "LB": "ar-LB", "SY": "ar-SY", "IQ": "ar-IQ", "YE": "ar-YE",
+    "PS": "ar-PS", "MA": "ar-MA", "DZ": "ar-DZ", "TN": "ar-TN",
+    "LY": "ar-LY", "SD": "ar-SD",
+    "US": "en-US", "GB": "en-GB", "CA": "en-CA", "AU": "en-AU",
+    "FR": "fr-FR", "DE": "de-DE", "ES": "es-ES", "IT": "it-IT",
 }
 
-# ========== قاموس اللهجات → تعليمات النظام ==========
-DIALECT_PROMPTS: Dict[str, str] = {
-    "ar-SA": "تكلم باللهجة السعودية العامية الطبيعية (زي ما السعوديين بيتكلموا في حياتهم اليومية). استخدم كلمات وعبارات سعودية أصيلة.",
-    "ar-EG": "تكلم باللهجة المصرية العامية الطبيعية (زي ما المصريين بيتكلموا). استخدم كلمات مصرية زي: إيه، كده، أوي، عشان، يا عم، بص، معلش، تمام.",
-    "ar-AE": "تكلم باللهجة الإماراتية العامية. استخدم كلمات إماراتية أصيلة.",
-    "ar-KW": "تكلم باللهجة الكويتية العامية. استخدم كلمات كويتية أصيلة.",
-    "ar-QA": "تكلم باللهجة القطرية العامية. استخدم كلمات قطرية أصيلة.",
-    "ar-BH": "تكلم باللهجة البحرينية العامية. استخدم كلمات بحرينية أصيلة.",
-    "ar-OM": "تكلم باللهجة العمانية العامية. استخدم كلمات عمانية أصيلة.",
-    "ar-JO": "تكلم باللهجة الأردنية العامية. استخدم كلمات أردنية أصيلة.",
-    "ar-LB": "تكلم باللهجة اللبنانية العامية. استخدم كلمات لبنانية أصيلة.",
-    "ar-SY": "تكلم باللهجة السورية العامية. استخدم كلمات سورية أصيلة.",
-    "ar-IQ": "تكلم باللهجة العراقية العامية. استخدم كلمات عراقية أصيلة.",
-    "ar-YE": "تكلم باللهجة اليمنية العامية. استخدم كلمات يمنية أصيلة.",
-    "ar-PS": "تكلم باللهجة الفلسطينية العامية. استخدم كلمات فلسطينية أصيلة.",
-    "ar-MA": "تكلم باللهجة المغربية العامية (الدارجة). استخدم كلمات مغربية أصيلة.",
-    "ar-DZ": "تكلم باللهجة الجزائرية العامية. استخدم كلمات جزائرية أصيلة.",
-    "ar-TN": "تكلم باللهجة التونسية العامية. استخدم كلمات تونسية أصيلة.",
-    "ar-LY": "تكلم باللهجة الليبية العامية. استخدم كلمات ليبية أصيلة.",
-    "ar-SD": "تكلم باللهجة السودانية العامية. استخدم كلمات سودانية أصيلة.",
-    "en-US": "Speak in natural American English. Use casual, everyday language.",
-    "en-GB": "Speak in natural British English. Use casual, everyday language.",
-    "en-CA": "Speak in natural Canadian English. Use casual, everyday language.",
-    "en-AU": "Speak in natural Australian English. Use casual, everyday language.",
-    "fr-FR": "Parle en français naturel et décontracté.",
-    "de-DE": "Sprich in natürlichem, entspanntem Deutsch.",
-    "es-ES": "Habla en español natural y coloquial.",
-    "it-IT": "Parla in italiano naturale e colloquiale.",
-    "ar-TR": "تكلم بالعربية العامية. استخدم كلمات بسيطة وواضحة.",
+# ========== قاموس الكلمات المفتاحية الموسع (متوسط الحجم وسريع) ==========
+DIALECT_KEYWORDS = {
+    "egyptian": [
+        "إيه", "ازيك", "عامل", "بتاع", "دلوقتي", "كده", "مش", "اهو",
+        "يعني", "معلش", "خالص", "اوي", "عشان", "فين", "امتى", "ازاي",
+        "يا عم", "والله", "بجد", "حلو", "وحش", "فلوس", "عربية", "جمب",
+        "شوية", "كتير", "قوي", "برضه", "بردو", "لسه", "كمان", "شوف",
+    ],
+    "gulf": [
+        "شلونك", "وين", "ليش", "تبي", "يبي", "زين", "واجد", "حيل",
+        "هذا", "شنو", "ابغى", "مري", "ياخي", "تمام", "طيب", "يلا",
+        "شو", "عيل", "مب", "أوكي", "وايد", "هذي", "هذولي", "الحين",
+        "عقب", "بكرة", "أمس", "دايم", "أبشر", "تستاهل",
+    ],
+    "levantine": [
+        "شو", "كيفك", "هلق", "يلا", "مش هيك", "شب", "عم", "هون",
+        "هيك", "كتير", "شوي", "منيح", "ليش", "بدي", "أنا", "إنت",
+        "نحنا", "هما", "في", "ما في", "عندي", "معي", "أهلاً", "مرحبا",
+    ],
+    "moroccan": [
+        "واش", "كيداير", "بزاف", "مزيان", "دابا", "ماشي", "شنو",
+        "الدراري", "البنت", "كيجي", "علاش", "فين", "منين", "لاباس",
+        "كيفاش", "شنو كتقول", "مزيانة", "مزيانين",
+    ],
+    "english": [
+        "hello", "hi", "how are", "what", "why", "thanks", "please",
+        "sorry", "good morning", "good night", "see you", "take care",
+        "i'm", "you're", "we're", "they're", "can't", "don't", "won't",
+    ],
 }
 
-# ========== الكلمات المفتاحية للهجات (لتحليل النص) ==========
-DIALECT_KEYWORDS: Dict[str, list] = {
-    "ar-SA": ["وش", "إيش", "الين", "مري", "ياخي", "أبغى", "تمام", "طيب", "يلا"],
-    "ar-EG": ["إزاي", "عايز", "مش", "كده", "أوي", "دلوقتي", "بس", "عشان", "يا عم"],
-    "ar-AE": ["شو", "هذا", "عيل", "يلا", "مب", "أوكي", "حلو", "وايد", "حيل"],
-    "ar-KW": ["شنو", "شلون", "شكو", "ماكو", "شكد", "عوف", "خوش", "زين"],
-    "ar-IQ": ["شلون", "شكو", "ماكو", "شكد", "عوف", "خوش", "زين", "كلش", "هواية"],
-    "ar-LB": ["شو", "هيك", "كتير", "شوي", "منيح", "هلأ", "ليش", "بدي"],
-    "ar-SY": ["شو", "هيك", "كتير", "شوي", "منيح", "هلأ", "ليش", "بدي"],
-    "ar-MA": ["شنو", "دابا", "بزاف", "مزيان", "كيجي", "الدراري", "واش"],
-    "ar-DZ": ["واش", "صحا", "بصح", "درك", "هدرة", "وعلاه", "يا لحبيب"],
-    "ar-TN": ["شنو", "برشا", "بالك", "هاني", "عيشك", "يفقد", "توة"],
+# ========== قاموس تعليمات AI الموسعة والواضحة ==========
+DIALECT_PROMPTS = {
+    "egyptian": "إنت بتكلم مصري. خليك زي البيتزا والفلافل. استخدم كلمات مصرية كتير: 'إيه'، 'دلوقتي'، 'كده'، 'معلش'، 'يا عم'، 'والله'، 'بجد'. خليك دافئ وعفوي ومصري جداً.",
+    "gulf": "إنت بتكلم خليجي. إنت رايق ومحترم. استخدم كلمات: 'وين'، 'ليش'، 'زين'، 'واجد'، 'تبي'، 'أبشر'، 'تستاهل'. تكلم بكل هدوء وثقة.",
+    "levantine": "إنت بتكلم شامي. إنت طيب القلب وعفوي. استخدم كلمات: 'شو'، 'هيك'، 'كتير'، 'منيح'، 'لهلق'، 'ليش'، 'بدي'. إجعل كلامك فيه موسيقى الشام.",
+    "moroccan": "إنت بتكلم مغربي (دارجة). إنت مضياف وكريم. استخدم كلمات: 'واش'، 'بزاف'، 'مزيان'، 'دابا'، 'كيداير'، 'لاباس'. كن فخوراً بثقافتك.",
+    "english": "You speak natural, modern English. Be warm, genuine, and use contractions like 'you're', 'it's', 'can't'. Sound like a caring friend, not a textbook.",
+    "modern_arabic": "تكلم بعربية بسيطة وطبيعية، قريبة من العامية وليست فصحى جافة. كن دافئاً وعفوياً. استخدم كلمات سهلة وواضحة.",
 }
 
-# ========== الدوال العامة ==========
-
-def get_dialect_from_country(country_code: str) -> str:
-    """
-    تحديد اللهجة من كود الدولة.
-    مثال: 'SA' → 'ar-SA', 'US' → 'en-US'
-    """
-    return COUNTRY_TO_DIALECT.get(country_code, "ar-SA")  # السعودية كافتراضي
-
-def get_dialect_from_text(text: str, default_dialect: str = "ar-SA") -> str:
+def get_dialect_from_text(text: str) -> str:
     """
     تحليل النص لتحديد اللهجة المستخدمة.
-    إذا لم يتم التعرف على اللهجة، يُرجع default_dialect.
+    يُرجع اسم اللهجة (مثل 'egyptian') أو 'modern_arabic' إذا لم يتعرف على شيء.
     """
     text_lower = text.lower()
     scores: Dict[str, int] = {}
@@ -110,34 +73,47 @@ def get_dialect_from_text(text: str, default_dialect: str = "ar-SA") -> str:
             scores[dialect] = score
 
     if scores:
+        # إرجاع اللهجة صاحبة أعلى درجة
         return max(scores, key=scores.get)
 
-    return default_dialect
+    return "modern_arabic"
+
+def get_dialect_from_country(country_code: str) -> str:
+    """
+    تحديد اللهجة من كود الدولة كخطة بديلة.
+    """
+    mapping = {
+        "EG": "egyptian", "SA": "gulf", "AE": "gulf", "KW": "gulf",
+        "QA": "gulf", "BH": "gulf", "OM": "gulf",
+        "JO": "levantine", "LB": "levantine", "SY": "levantine", "PS": "levantine",
+        "IQ": "gulf", "YE": "gulf",
+        "MA": "moroccan", "DZ": "moroccan", "TN": "moroccan", "LY": "moroccan",
+        "US": "english", "GB": "english", "CA": "english", "AU": "english",
+    }
+    return mapping.get(country_code, "modern_arabic")
+
+def get_dialect_for_user(country_code: str, message: str) -> str:
+    """
+    يحدد اللهجة النهائية:
+    1. يحاول اكتشافها من النص أولاً (الأكثر دقة).
+    2. إذا فشل (نص قصير أو غير واضح)، يستخدم الدولة كخطة بديلة.
+    """
+    if message and len(message.strip()) > 5:
+        text_dialect = get_dialect_from_text(message)
+        if text_dialect != "modern_arabic":
+            return text_dialect
+    
+    # إذا لم يتعرف على اللهجة من النص، نلجأ للدولة
+    return get_dialect_from_country(country_code)
 
 def get_dialect_prompt(dialect: str) -> str:
     """
     الحصول على تعليمات النظام للهجة المحددة.
     """
-    return DIALECT_PROMPTS.get(dialect, DIALECT_PROMPTS.get("ar-SA", ""))
-
-def get_dialect_for_user(country_code: str = "SA", message: str = "") -> str:
-    """
-    تحديد اللهجة النهائية للمستخدم:
-    1. إذا ظهرت لهجة واضحة في النص → نستخدمها.
-    2. وإلا → نستخدم لهجة الدولة.
-    """
-    default_dialect = get_dialect_from_country(country_code)
-
-    if message and len(message.strip()) > 10:
-        text_dialect = get_dialect_from_text(message, default_dialect)
-        # إذا كانت الثقة عالية في تحليل النص، استخدمه
-        if text_dialect != default_dialect:
-            return text_dialect
-
-    return default_dialect
+    return DIALECT_PROMPTS.get(dialect, DIALECT_PROMPTS["modern_arabic"])
 
 def get_voice_dialect(country_code: str) -> str:
     """
-    تحديد كود الصوت المناسب للبلد (لاستخدامه في Edge TTS/ElevenLabs).
+    تحديد كود الصوت المناسب للبلد (لاستخدامه في TTS).
     """
-    return COUNTRY_TO_DIALECT.get(country_code, "ar-SA")
+    return COUNTRY_TO_VOICE.get(country_code, "ar-SA")

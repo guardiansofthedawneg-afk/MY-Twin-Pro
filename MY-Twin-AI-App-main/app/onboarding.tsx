@@ -50,11 +50,17 @@ export default function Onboarding() {
     try {
       const analysis = analyzePersonality(answers);
       await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
-      track('onboarding_completed', { personality_type: analysis.dominant_type });
-      // إرسال رسالة تحليل الشخصية تلقائياً
+      // ✅ حفظ "أول لقاء" في جدول الذكريات
       try {
-        await API.post('/api/chat', { message: `مرحباً! أنا ${userName}. تم تحليل شخصيتي: ${analysis.dominant_type}. صفاتي: ${JSON.stringify(analysis.traits)}`, twin_name: twinName, bond_level: 0, dims: {} });
+        await supabase.from('memories').insert({
+          user_id: userId,
+          content: `أول لقاء: ${userName}، شخصية ${analysis.dominant_type}`,
+          emotion: 'joy',
+          importance: 1.0,
+          created_at: new Date().toISOString(),
+        });
       } catch (e) {}
+      track('onboarding_completed', { personality_type: analysis.dominant_type });
       setStep(6);
     } catch { Alert.alert('خطأ', 'لم نتمكن من حفظ بياناتك'); }
     finally { setLoading(false); setStep(6); }
