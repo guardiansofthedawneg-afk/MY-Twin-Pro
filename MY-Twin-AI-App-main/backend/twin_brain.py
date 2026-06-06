@@ -1,14 +1,13 @@
 import os, re, random, logging, time, asyncio
 from typing import Optional, List, Dict, Any
 import google.generativeai as genai
-from multi_ai import MultiAIClient
+from multi_ai import MultiAIClient, AIUnavailable
 from emotional_engine import EmotionalStateTracker
 from dialect_engine import get_dialect_for_user, get_dialect_prompt
 
 logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
-    # ========== قاموس الإيموجي الذكي ==========
     EMOJI_MAP = {
         "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
         "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
@@ -32,7 +31,7 @@ class TwinBrain:
     }
 
     def _safety_check(self, reply):
-        from safety_engine import SafetyEngine, SafetyLevel
+        from safety_engine import SafetyEngine
         result = SafetyEngine.check_safety(reply)
         if not result["safe"]:
             return "أنا هنا لدعمك. إذا كنت تمر بصعوبات، يرجى التواصل مع متخصص: https://findahelpline.com"
@@ -57,50 +56,37 @@ class TwinBrain:
         return self.emotion_tracker.analyze(text)
 
     def _enrich_reply(self, reply: str, emotion: Dict[str, Any], user_message: str, bond_level: float) -> str:
-        """
-        إضافة لمسات عاطفية وإيموجي ديناميكي للرد.
-        - لا يضيف إيموجي إذا كان المستخدم لا يستخدمه.
-        - يختار الإيموجي حسب المشاعر.
-        - ينوّع بين الإيموجي وعدم استخدامه لتجنب التكرار.
-        """
         primary_emotion = emotion.get("primary", "neutral")
         intensity = emotion.get("intensity", 0.5)
 
-        # هل المستخدم يستخدم إيموجي؟
         user_uses_emoji = False
         for emo_list in self.EMOJI_PATTERNS.values():
             if re.search(emo_list, user_message):
                 user_uses_emoji = True
                 break
 
-        # إذا كان المستخدم لا يستخدم إيموجي، نضيف فقط في الحالات العاطفية القوية
         if not user_uses_emoji and intensity < 0.7:
             return reply
 
-        # اختيار إيموجي مناسب (مع احتمالية عدم إضافة إيموجي للتنويع)
-        if random.random() > 0.8:  # 20% من الردود بدون إيموجي
+        if random.random() > 0.8:
             return reply
 
         emoji_list = self.EMOJI_MAP.get(primary_emotion, self.EMOJI_MAP["neutral"])
 
-        # إذا كانت العلاقة عميقة، أضف إيموجي حب
         if bond_level >= 80 and primary_emotion in ["neutral", "joy"]:
             emoji_list = self.EMOJI_MAP["love"]
 
-        # إذا كان المستخدم بحاجة لدعم، أضف إيموجي دعم
         if emotion.get("needs_support"):
             emoji_list = self.EMOJI_MAP["support"]
 
         emoji = random.choice(emoji_list)
 
-        # إضافة الإيموجي في نهاية الرد (وليس في كل سطر)
         if not reply.strip().endswith(tuple(self.EMOJI_MAP["neutral"] + self.EMOJI_MAP["joy"])):
             return f"{reply.strip()} {emoji}"
 
         return reply
 
     def _detect_task(self, message: str) -> str:
-        """تحديد نوع المهمة من الرسالة تلقائياً"""
         m = message.lower()
         if any(w in m for w in ["كود", "برمجة", "code", "python", "error", "bug", "خطأ برمجي"]):
             return "coding"
@@ -122,22 +108,15 @@ class TwinBrain:
         history: List[Dict] = None, calm: bool = False,
         country_code: str = "SA"
     ) -> str:
-        """
-        بناء الـ Prompt مع دعم اللهجات العامية.
-        """
-
-        # ✅ تحديد اللهجة المناسبة
         dialect = get_dialect_for_user(country_code, message)
         dialect_prompt = get_dialect_prompt(dialect)
 
-        # الذاكرة
         mem_txt = ""
         if memories:
             mem_txt = "ذكريات سابقة: " + " | ".join(
                 [m.get("content", "")[:100] for m in memories[:3]]
             )
 
-        # الشخصية
         person_txt = ""
         if personality:
             traits = personality.get("analyzed_traits", {})
@@ -145,7 +124,6 @@ class TwinBrain:
                 person_txt = f"\nشخصية المستخدم: {traits.get('dominant_type', 'متوازن')}. "
                 person_txt += f"وصف: {traits.get('description', '')}."
 
-        # تاريخ المحادثة
         hist_txt = ""
         if history:
             hist_txt = "\nالمحادثة السابقة:\n" + "\n".join(
@@ -153,7 +131,6 @@ class TwinBrain:
                  for h in history[-5:]]
             )
 
-        # مستوى العلاقة
         bond_desc = (
             "أنتما توأما روح" if bond >= 95 else
             "علاقتكما عميقة جداً" if bond >= 80 else
@@ -164,7 +141,6 @@ class TwinBrain:
 
         calm_note = "\nتحدث بهدوء ولطف شديد." if calm else ""
 
-        # ✅ إضافة تعليمات اللهجة
         return (
             f"أنت {twin_name}، رفيق ذكي وعاطفي. {bond_desc}.{calm_note}\n"
             f"{person_txt}\n{mem_txt}{hist_txt}\n"
@@ -191,11 +167,6 @@ class TwinBrain:
         calm: bool = False, personality: Optional[Dict] = None,
         country_code: str = "SA"
     ) -> Dict[str, Any]:
-        """
-        الرد الرئيسي – مع دعم اللهجات والصوت.
-        """
-
-        # تحقق من الأسئلة التي تحتاج بحث
         if re.search(r'كم |متى |من هو |ما هو |أين |طقس|أخبار|weather|news|سعر', message):
             ground = self._try_grounding(message)
             if ground:
@@ -206,29 +177,32 @@ class TwinBrain:
                     "dialect": get_dialect_for_user(country_code, message),
                 }
 
-        # تحديد المهمة تلقائياً
         task = self._detect_task(message)
 
-        # بناء الـ prompt (مع اللهجة)
         prompt = self._build_prompt(
             message, twin_name, bond_level,
             memories, personality, history, calm, country_code
         )
 
         start = time.time()
-        reply = await self.multi.get_best_reply(prompt, task)
+        # ---- معالجة الأخطاء بشكل صريح ----
+        try:
+            reply = await self.multi.get_best_reply(prompt, task)
+        except AIUnavailable as e:
+            logger.error(f"AI unavailable: {e}")
+            reply = "أواجه حالياً ضغطاً تقنياً مؤقتاً، لكنني ما زلت معك وسأعود للعمل الكامل خلال لحظات 💜"
+        except Exception as e:
+            logger.error(f"Brain error: {e}")
+            reply = "حدث خطأ غير متوقع. يرجى المحاولة لاحقاً."
+        
         latency = (time.time() - start) * 1000
 
         if not reply:
             reply = "أنا هنا معاك دائماً 💜"
 
-        # تحليل مشاعر المستخدم
         emotion = self.detect_emotion(message)
-
-        # ✅ إثراء الرد بالإيموجي الديناميكي
         reply = self._enrich_reply(reply, emotion, message, bond_level)
 
-        # حساب bond جديد
         bond_delta = 0.5 if emotion.get("needs_support") else 0.2
         new_bond = min(100, bond_level + bond_delta)
 
@@ -265,7 +239,6 @@ class TwinBrain:
         uid: str, calm: bool = False,
         personality: Optional[Dict] = None
     ) -> Dict[str, Any]:
-        """الرد العميق — يستخدم كل المعرفة المتاحة عن المستخدم"""
         from knowledge_engine import knowledge_engine
 
         user_context = await knowledge_engine.get_user_context(uid)
@@ -310,8 +283,6 @@ class TwinBrain:
         history: List[Dict], calm: bool,
         user_context: Dict
     ) -> str:
-        """بناء Prompt عميق يستخدم كل المعرفة"""
-
         identity = user_context.get("identity", {})
         identity_txt = ""
         if identity:
@@ -373,6 +344,5 @@ class TwinBrain:
 تذكر: أنت تعرف هذا الشخص جيداً وتهتم به حقاً."""
 
     def _detect_dialect(self, text: str) -> str:
-        """تحديد اللهجة من النص (للتوافق مع الكود القديم)"""
         from dialect_engine import get_dialect_from_text
         return get_dialect_from_text(text)

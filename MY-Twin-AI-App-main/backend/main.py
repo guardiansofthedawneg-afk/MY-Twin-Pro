@@ -17,16 +17,14 @@ from emotional_engine import calc_energy, tts_params, get_voice_emotion
 from time import time
 from monitoring import AIMonitor
 from multi_ai import AIUnavailable
-from latency_tracker import tracker  # ✅ تتبع زمن الاستجابة
+from latency_tracker import tracker
 
-# ========== الخدمات الخارجية ==========
 from external_services import (
     search_youtube, search_spotify, get_weather,
     get_todoist_tasks, get_calendar_events,
     get_news, get_location_info, get_knowledge
 )
 
-# ========== تيليجرام Webhook ==========
 from telegram_webhook import router as telegram_router, setup_webhook
 
 try:
@@ -72,14 +70,12 @@ consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
 app = FastAPI(title="MyTwin API", version="8.0.0")
 
-# ========== تيليجرام Webhook ==========
 app.include_router(telegram_router)
 
 @app.on_event("startup")
 async def startup_event():
     await setup_webhook()
 
-# ─── Monitoring Middleware ─────────────────────────────────────
 @app.middleware("http")
 async def monitor_requests(request: Request, call_next):
     start = time()
@@ -123,7 +119,7 @@ async def get_profile(uid):
     k = f"p:{uid}"
     if c := cache_get(k): return c
     try:
-        r = await run_async(lambda: db.table("profiles").select("*").eq("id", uid).single().execute())
+        r = await run_async(lambda: db.table("profiles").select("*").eq("user_id", uid).single().execute())
         p = r.data or {}
         cache_set(k, p, 600)
         return p
@@ -179,11 +175,10 @@ async def chat(
         rem = lim - used - est
     emo_filter = None
     emo = {"needs_support": False}
-
-    # ✅ تتبع زمن اكتشاف المشاعر
+    
     tracker.start("emotion_detection")
     try:
-        emo = brain.detect_emotion(body.message)
+        emo = await brain.detect_emotion(body.message)
         if emo.get("needs_support"): emo_filter = "sadness"
     except Exception as exc:
         logger.warning(f"emotion detection failed: {exc}")
@@ -200,7 +195,7 @@ async def chat(
         logger.warning(f"memory retrieval failed: {exc}")
     if not mems:
         try:
-            from memory_engine import get_mems
+            from memory_engine import retrieve as get_mems
             mems = await run_async(lambda: get_mems(uid, body.message, 7, 5))
         except Exception as exc:
             logger.warning(f"fallback memory retrieval failed: {exc}")
@@ -210,29 +205,31 @@ async def chat(
         if pers.data: personality_data = pers.data.get("analyzed_traits")
     except Exception as exc:
         logger.debug(f"Personality lookup failed: {exc}")
-
-    # ✅ تتبع زمن استجابة الدماغ
+    
     tracker.start("brain_response")
     try:
-        res = await run_async(lambda: brain.respond(
+        res = await brain.respond(
             message=body.message, twin_name=body.twin_name, bond_level=body.bond_level,
             dims=body.dims, memories=mems, history=body.history[-10:], calm=is_calm,
             personality=personality_data, country_code=country_code
-        ))
+        )
         tracker.end()
         AIMonitor.log(
             db=db, uid=uid, provider=res.get("provider"),
             task=res.get("task", "general"), latency=res.get("latency_ms", 0),
             success=True, tokens=est
         )
-    except AIUnavailable:
+    except AIUnavailable as e:
+        logger.error(f"AI Unavailable: {e}")
         return {
-            "reply": "أواجه حالياً ضغطاً تقنياً مؤقتاً، لكنني ما زلت معك وسأعود للعمل الكامل خلال لحظات 💜",
-            "provider": "fallback", "confidence": 0
+            "reply": "أواجه حالياً ضغطاً تقنياً مؤقتاً، لكنني ما زلت معك 💜",
+            "provider": "fallback",
+            "confidence": 0
         }
     except Exception as e:
-        logger.error(f"brain: {e}")
-        raise HTTPException(500, "ai_error")
+        logger.error(f"Brain error: {e}")
+        raise HTTPException(500, detail=f"Brain error: {str(e)}")
+    
     sug = None
     if HAS_PRODUCT_RECOMMENDER:
         try:
@@ -271,7 +268,7 @@ async def chat(
         "tts_dialect": voice_dialect,
         "tokens_left": rem,
         "provider": res.get("provider","gemini_flash"),
-        "latency_breakdown": tracker.get_breakdown(),  # ✅ تقرير زمن الاستجابة
+        "latency_breakdown": tracker.get_breakdown(),
     }
     if "dream_data" in res: resp["dream"] = res["dream_data"]
     if "coaching_data" in res: resp["coaching"] = res["coaching_data"]
@@ -280,7 +277,7 @@ async def chat(
 
 @app.delete("/api/account")
 async def del_acc(uid=Depends(get_user)):
-    await run_async(lambda: db.table("profiles").delete().eq("id", uid).execute())
+    await run_async(lambda: db.table("profiles").delete().eq("user_id", uid).execute())
     try: await run_async(lambda: db.auth.admin.delete_user(uid))
     except Exception as e: logger.warning(f"del user: {e}")
     return {"status":"deleted"}
@@ -346,37 +343,31 @@ async def get_device_status(entity_id: str, uid=Depends(get_user)):
     state = sh.get_device_state(entity_id)
     return state or {"status": "unavailable"}
 
-# ========== YouTube ==========
 @app.get("/api/services/youtube")
 async def youtube_endpoint(query: str, lang: str = "ar"):
     result = await search_youtube(query, lang=lang)
     return {"result": result} if result else {"error": "unavailable"}
 
-# ========== Spotify ==========
 @app.get("/api/services/spotify")
 async def spotify_endpoint(query: str):
     result = await search_spotify(query)
     return {"result": result} if result else {"error": "unavailable"}
 
-# ========== الطقس ==========
 @app.get("/api/services/weather")
 async def weather_endpoint(city: str = "Cairo", lat: Optional[float] = None, lon: Optional[float] = None):
     result = await get_weather(city, lat, lon)
     return {"result": result} if result else {"error": "unavailable"}
 
-# ========== Todoist ==========
 @app.get("/api/services/todoist")
 async def todoist_endpoint(token: str = ""):
     result = await get_todoist_tasks(token)
     return {"result": result}
 
-# ========== Google Calendar ==========
 @app.get("/api/services/calendar")
 async def calendar_endpoint(token: str = ""):
     result = await get_calendar_events(token)
     return {"result": result}
 
-# ========== خدمات أخرى ==========
 @app.get("/api/services/news")
 async def news_endpoint(query: str = "world", lang: str = "ar"):
     result = await get_news(query, lang)
@@ -391,7 +382,6 @@ async def knowledge_endpoint(query: str):
     result = await get_knowledge(query)
     return {"result": result} if result else {"error": "unavailable"}
 
-# ========== الإحالة ==========
 class ReferralCodeReq(BaseModel):
     code: str = Field(..., min_length=2, max_length=20)
 
@@ -399,7 +389,7 @@ class ReferralCodeReq(BaseModel):
 async def generate_referral(uid=Depends(get_user)):
     from referral import generate_referral_code
     code = generate_referral_code(uid)
-    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("id", uid).execute())
+    await run_async(lambda: db.table("profiles").update({"referral_code": code}).eq("user_id", uid).execute())
     return {"code": code}
 
 @app.post("/api/referral/activate")
@@ -415,7 +405,6 @@ async def activate_referral_endpoint(body: ReferralCodeReq, uid=Depends(get_user
         return {"success": True, "bonus": 500}
     raise HTTPException(400, result.get("error", "invalid_code"))
 
-# ========== AI Endpoints ==========
 @app.get("/api/ai/grok")
 async def grok_chat(prompt: str):
     from multi_ai import MultiAIClient
