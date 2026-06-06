@@ -9,14 +9,14 @@ logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
     EMOJI_MAP = {
-        "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
-        "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
-        "anger": ["😤", "💪", "🔥", "⚡", "🧘", "🌿"],
-        "fear": ["🫶", "💜", "🤝", "🔒", "️", "✨"],
-        "love": ["💕", "💗", "💝", "🥰", "💌", "🫶", "💖", "🌸"],
-        "surprise": ["😮", "🤩", "💡", "🎯", "🔮", "✨"],
-        "neutral": ["💜", "🌸", "✨", "💭", "🤍", "🌙"],
-        "support": ["💪", "🤝", "💜", "🫶", "✨", "🌟"],
+        "joy": ["😊", "😄", "", "✨", "", "", "🎉", ""],
+        "sadness": ["💜", "", "️", "💙", "", "🤗", "🌸"],
+        "anger": ["😤", "", "", "", "", ""],
+        "fear": ["🫶", "💜", "", "", "️", "✨"],
+        "love": ["", "💗", "💝", "", "💌", "", "💖", ""],
+        "surprise": ["😮", "", "💡", "🎯", "", "✨"],
+        "neutral": ["💜", "", "✨", "💭", "", ""],
+        "support": ["", "", "", "", "✨", "🌟"],
     }
 
     def __init__(self, gemini_key=None):
@@ -33,21 +33,20 @@ class TwinBrain:
             self.multi = MultiAIClient()
             logger.info("✅ MultiAIClient initialized")
         except Exception as e:
-            logger.error(f"❌ MultiAIClient init failed: {e}")
+            logger.error(f" MultiAIClient init failed: {e}")
             self.multi = None
             
         self.emotion_tracker = EmotionalStateTracker()
         self.fallback_replies = [
             "أنا هنا معك دائماً 💜",
-            "أتفهم ما تشعر به، أنا بجانبك",
+            "أتفهم ما تشعر به، أنا بجانبك ",
             "حدثني أكثر عن ذلك، أنا أستمع إليك 👂",
         ]
 
-    def detect_emotion(self, text: str) -> Dict[str, Any]:
+    async def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            return self.emotion_tracker.analyze(text)
-        except:
-            return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
+            return await self.emotion_tracker.analyze(text)
+        except Exception:            return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
     def _detect_task(self, message: str) -> str:
         m = message.lower()
@@ -63,6 +62,9 @@ class TwinBrain:
             return "multilingual"
         if any(w in m for w in ["افعل", "نفذ", "ابحث", "do this", "search", "execute"]):
             return "agent"
+        # ✅ FIX: Added music detection safely without breaking indentation
+        if any(w in m for w in ["اغنية", "موسيقى", "شغل", "play", "song", "music"]):
+            return "music"
         return "general"
 
     def _build_prompt(
@@ -110,6 +112,27 @@ class TwinBrain:
         country_code: str = "SA"
     ) -> Dict[str, Any]:
         task = self._detect_task(message)
+        
+        # ✅ FIX: Handle music task separately before building prompt
+        if task == "music":
+            query = message.replace("شغل", "").replace("اغنية", "").replace("موسيقى", "").strip()
+            if not query: query = "أغنية عشوائية جميلة"
+            try:
+                from external_services import search_youtube
+                yt_result = await search_youtube(query, lang="ar")
+                if yt_result and isinstance(yt_result, list) and len(yt_result) > 0:
+                    video = yt_result[0]
+                    return {
+                        "reply": f"🎵 وجدت لك هذه الأغنية: {video.get('title', '')}\n{video.get('url', '')}",
+                        "new_bond": bond_level,
+                        "emotion": {},
+                        "importance": 0.5,
+                        "provider": "youtube",
+                        "latency_ms": 0
+                    }
+            except Exception as e:
+                logger.warning(f"Music search failed: {e}")
+        
         prompt = self._build_prompt(message, twin_name, bond_level, memories, personality, history, calm, country_code)
         
         start = time.time()
@@ -121,25 +144,27 @@ class TwinBrain:
             provider = "init_error"
         else:
             try:
-                logger.info(f"🧠 Calling MultiAI for task: {task}")
+                logger.info(f" Calling MultiAI for task: {task}")
                 reply = await self.multi.get_best_reply(prompt, task)
                 provider = f"multi_{task}"
                 logger.info(f"✅ AI replied via {provider}")
             except AIUnavailable:
-                logger.warning("⚠️ All AI models unavailable")
+                logger.warning("️ All AI models unavailable")
                 reply = random.choice(self.fallback_replies)
             except Exception as e:
                 logger.error(f"💥 Brain crash: {type(e).__name__}: {str(e)}")
-                reply = f"خطأ تقني: {str(e)[:150]}"
+                import traceback
+                traceback.print_exc()
+                reply = f"خطأ تقني: {str(e)[:150]}" 
                 provider = "crash_log"
         
         latency = (time.time() - start) * 1000
         
-        emotion = self.detect_emotion(message)
+        emotion = await self.detect_emotion(message)
         primary_emo = emotion.get("primary", "neutral")
         emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
         emoji = random.choice(emoji_list) if emoji_list else "💜"
-        if reply and not any(e in reply for e in ["😊","💜","✨", "🌟", "🥺"]):
+        if reply and not any(e in reply for e in ["😊","","✨", "", ""]):
             reply = f"{reply} {emoji}"
 
         return {

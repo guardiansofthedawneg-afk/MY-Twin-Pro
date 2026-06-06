@@ -1,4 +1,4 @@
-"""MyTwin API v8.4 — Fixed ALLOWED_ORIGINS & Auth"""
+"""MyTwin API v8.5 — Final Stable & Safe Version"""
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -39,30 +39,22 @@ brain = TwinBrain(GEMINI_KEY)
 from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
-# ✅ FIX: Define ALLOWED_ORIGINS BEFORE using it in middleware
-ALLOWED_ORIGINS = [
-    "https://mytwin.app", 
-    "http://localhost:3000", 
-    "http://localhost:8000", 
-    "http://127.0.0.1:19006",
-    "exp://192.168.1.1:19000" # For Expo Go testing
-]
 # ---- FastAPI App ----
-app = FastAPI(title="MyTwin API", version="8.4.0")
+ALLOWED_ORIGINS = [
+    "https://mytwin.app",
+    "http://localhost:3000",
+    "http://localhost:8000",
+    "http://127.0.0.1:19006",
+    "exp://192.168.1.1:19000"
+]
+app = FastAPI(title="MyTwin API", version="8.5.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
 async def startup_event():
     await setup_webhook()
 
-# ---- CORS & Middleware ----
-app.add_middleware(
-    CORSMiddleware, 
-    allow_origins=ALLOWED_ORIGINS, 
-    allow_methods=["*"], 
-    allow_headers=["*"], 
-    allow_credentials=True
-)
+app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
@@ -100,7 +92,7 @@ class ChatReq(BaseModel):
     dims: dict = Field(default_factory=dict)
     history: list = Field(default_factory=list)
 
-# ---- Core Chat Endpoint ----
+# ---- Core Chat Endpoint (SAFE & STABLE) ----
 @app.post("/api/chat")
 @limiter.limit("30/minute")
 async def chat(
@@ -115,11 +107,10 @@ async def chat(
     country_code = x_country_code or "SA"
     twin_gender = x_twin_gender or "female"
 
-    # 1. Get basic profile
     p = get_profile(uid)
     tier = p.get("tier", "free")
 
-    # 2. Call TwinBrain with safety
+    # ---- Call TwinBrain with full safety net ----
     res = {}
     try:
         res = await brain.respond(
@@ -142,13 +133,13 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
-    # 3. Increment usage safely
+    # ---- Increment usage safely (background) ----
     try:
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
-    except Exception:        pass
+    except Exception:
+        pass
 
-    # 4. Return response
     return {
         "reply": res.get("reply", "..."),
         "new_bond": res.get("new_bond", 0),
@@ -161,7 +152,7 @@ async def chat(
 # ---- Other Endpoints ----
 @app.get("/")
 async def root():
-    return {"status": "ok", "version": "8.4.0"}
+    return {"status": "ok", "version": "8.5.0"}
 
 @app.delete("/api/account")
 async def del_acc(uid: str = Depends(get_user)):
