@@ -1,10 +1,10 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { useTwinStore } from '../store/useTwinStore';
 import { router, Href } from 'expo-router';
-import { Home, MessageCircle, History, User, BrainCircuit, Palette, Diamond, Settings, HelpCircle, LogOut, X, PlusCircle, Gift } from 'lucide-react-native';
+import { Home, MessageCircle, History, User, BrainCircuit, Palette, Diamond, Settings, HelpCircle, LogOut, X, PlusCircle, Gift, Heart, BatteryFull, BatteryMedium, BatteryLow } from 'lucide-react-native';
 
 export default function SideMenu({ onClose }: { onClose: () => void }) {
-  const { lang, theme, clearHistory } = useTwinStore();
+  const { lang, theme, clearHistory, energy, twinName } = useTwinStore();
   const isAr = lang === 'ar';
   const isDark = theme === 'dark';
   const t = (ar: string, en: string) => isAr ? ar : en;
@@ -27,32 +27,69 @@ export default function SideMenu({ onClose }: { onClose: () => void }) {
     { icon: Settings, label: t('الإعدادات','Settings'), route: '/settings' as Href },
   ];
 
+  const getBatteryIcon = () => {
+    if (energy >= 70) return <BatteryFull size={16} stroke="#10B981" />;
+    if (energy >= 30) return <BatteryMedium size={16} stroke="#F59E0B" />;
+    return <BatteryLow size={16} stroke="#EF4444" />;
+  };
+
   return (
-    <View style={[styles.container, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
-      <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
+    <View style={[s.container, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
+      {/* زر الإغلاق */}
+      <TouchableOpacity style={s.closeBtn} onPress={onClose}>
         <X size={24} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
       </TouchableOpacity>
+
+      {/* عناصر القائمة */}
       {items.map((item, i) => {
         const Icon = item.icon;
         const onPress = item.onPress || (() => { router.push(item.route!); onClose(); });
         return (
-          <TouchableOpacity key={i} style={styles.item} onPress={onPress}>
-            <Icon size={20} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-            <Text style={[styles.label, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{item.label}</Text>
+          <TouchableOpacity key={i} style={s.item} onPress={onPress}>
+            <Icon size={22} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+            <Text style={[s.label, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{item.label}</Text>
           </TouchableOpacity>
         );
       })}
-      <TouchableOpacity style={styles.item} onPress={() => { router.push('/help' as Href); onClose(); }}>
-        <HelpCircle size={20} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-        <Text style={[styles.label, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{t('مساعدة','Help')}</Text>
+
+      {/* المساعدة */}
+      <TouchableOpacity style={s.item} onPress={() => { router.push('/help' as Href); onClose(); }}>
+        <HelpCircle size={22} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
+        <Text style={[s.label, { color: isDark ? '#FFF' : '#1A1A1A' }]}>{t('مساعدة','Help')}</Text>
       </TouchableOpacity>
+
+      {/* بطارية التوأم العاطفية */}
+      <View style={[s.batterySection, isDark && { borderTopColor: '#444' }]}>
+        <View style={s.batteryRow}>
+          {getBatteryIcon()}
+          <Text style={[s.batteryLabel, isDark && { color: '#CCC' }]}>
+            {t('طاقة التوأم', 'Twin Energy')}
+          </Text>
+          <Text style={[s.batteryValue, isDark && { color: '#D8B4FE' }]}>
+            {Math.round(energy)}%
+          </Text>
+        </View>
+        <View style={s.batteryBar}>
+          <View style={[s.batteryFill, { width: `${Math.min(energy, 100)}%`, backgroundColor: energy >= 70 ? '#10B981' : energy >= 30 ? '#F59E0B' : '#EF4444' }]} />
+        </View>
+        <Text style={[s.batteryName, isDark && { color: '#888' }]}>
+          {twinName || (isAr ? 'توأمك' : 'Your Twin')}
+        </Text>
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   container: { flex: 1, padding: 20, paddingTop: 40 },
-  closeBtn: { alignSelf: 'flex-end', marginBottom: 20 },
-  item: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 12 },
-  label: { fontSize: 15 },
+  closeBtn: { alignSelf: 'flex-end', marginBottom: 24 },
+  item: { flexDirection: 'row', alignItems: 'center', gap: 14, padding: 14, borderRadius: 12, marginBottom: 2 },
+  label: { fontSize: 16, fontWeight: '500' },
+  batterySection: { marginTop: 'auto', paddingTop: 16, borderTopWidth: 1, borderTopColor: '#E0D9F5' },
+  batteryRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  batteryLabel: { fontSize: 13, color: '#666', flex: 1 },
+  batteryValue: { fontSize: 15, fontWeight: '700', color: '#6B21A8' },
+  batteryBar: { height: 6, backgroundColor: '#F0F0F0', borderRadius: 3, overflow: 'hidden', marginBottom: 8 },
+  batteryFill: { height: '100%', borderRadius: 3 },
+  batteryName: { fontSize: 12, color: '#AAA', textAlign: 'center' },
 });

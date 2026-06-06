@@ -9,9 +9,8 @@ import * as Localization from 'expo-localization';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
-import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera, X } from 'lucide-react-native';
+import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera, X, Sparkles, Heart, Zap } from 'lucide-react-native';
 
-// --- مكون الصورة الرمزية للتوأم ---
 function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
   const bg = isFemale ? '#E9D5FF' : '#DDD6FE';
@@ -21,9 +20,8 @@ function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
     </View>
   );
 }
-const avs = StyleSheet.create({ wrap: { justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.2, shadowRadius: 6, elevation: 3 } });
+const avs = StyleSheet.create({ wrap: { justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.3, shadowRadius: 8, elevation: 5 } });
 
-// --- مكون زر متحرك ---
 function AnimBtn({ onPress, style, children }: { onPress?: () => void; style?: any; children: React.ReactNode }) {
   const scale = useRef(new Animated.Value(1)).current;
   const handlePress = useCallback(() => {
@@ -41,7 +39,6 @@ function AnimBtn({ onPress, style, children }: { onPress?: () => void; style?: a
   );
 }
 
-// --- رسالة الترحيب ---
 function getWelcome(lang: 'ar' | 'en') {
   const h = new Date().getHours();
   if (lang === 'ar') {
@@ -56,7 +53,6 @@ function getWelcome(lang: 'ar' | 'en') {
   return { emoji: '🌃', text: 'Happy late night! Shall we talk?' };
 }
 
-// --- الاقتراحات السريعة ---
 function getSuggestions(lang: 'ar' | 'en') {
   if (lang === 'ar') return [
     { icon: Smile, label: 'دردشة', prompt: 'لنتحدث عن أي شيء' },
@@ -90,18 +86,38 @@ export default function Chat() {
   const waveAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const attachAnim = useRef(new Animated.Value(0)).current;
+  const bondGlow = useRef(new Animated.Value(1)).current;
+  const energyPulse = useRef(new Animated.Value(1)).current;
   const isRTL = lang === 'ar';
   const welcome = getWelcome(lang);
   const suggestions = getSuggestions(lang);
   const isFree = tier === 'free';
-  const [youtubeUsage, setYoutubeUsage] = useState(0);
   const isDark = theme === 'dark';
+
+  // --- مؤشرات متحركة (طاقة وترابط) ---
+  useEffect(() => {
+    Animated.loop(Animated.sequence([
+      Animated.timing(bondGlow, { toValue: 1.05, duration: 2000, useNativeDriver: true }),
+      Animated.timing(bondGlow, { toValue: 1, duration: 2000, useNativeDriver: true }),
+    ])).start();
+  }, []);
+
+  useEffect(() => {
+    if (energy < 0.3) {
+      Animated.loop(Animated.sequence([
+        Animated.timing(energyPulse, { toValue: 1.2, duration: 500, useNativeDriver: true }),
+        Animated.timing(energyPulse, { toValue: 1, duration: 500, useNativeDriver: true }),
+      ])).start();
+    } else {
+      energyPulse.setValue(1);
+    }
+  }, [energy]);
 
   // --- التمرير التلقائي الذكي ---
   useEffect(() => {
     const timer = setTimeout(() => {
       flatRef.current?.scrollToEnd({ animated: true });
-    }, 150);
+    }, 100);
     return () => clearTimeout(timer);
   }, [chatHistory]);
 
@@ -123,7 +139,7 @@ export default function Chat() {
 
   const countryCode = (Localization.region || 'SA').toUpperCase();
 
-  // --- دالة الإرسال المركزية (محسنة) ---
+  // --- دالة الإرسال المركزية (محسنة مع TTS مباشر) ---
   const send = useCallback(async (msg?: string, imageBase64?: string) => {
     const message = (msg || input).trim();
     if (!message && !imageBase64) return;
@@ -153,7 +169,8 @@ export default function Chat() {
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
 
-      if (soundEnabled && res.data?.tts) {
+      // ✅ TTS مباشر (بدون انتظار حقل tts)
+      if (soundEnabled) {
         try {
           const { speakResponse } = require('../utils/voice_engine');
           await speakResponse(res.data.reply, {
@@ -194,7 +211,7 @@ export default function Chat() {
     } catch (e) { Alert.alert('🎤', lang === 'ar' ? 'الصوت غير متاح' : 'Voice unavailable'); }
   }, [isRecording, lang, send, isFree]);
 
-  // --- إجراءات المرفقات (بما فيها النوافذ المنبثقة) ---
+  // --- إجراءات المرفقات ---
   const handleAttachAction = useCallback(async (action: string) => {
     setShowAttach(false);
     if (action === 'camera') { handleCamera(); return; }
@@ -212,10 +229,13 @@ export default function Chat() {
       if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة حصرية للباقات المدفوعة' : 'Feature exclusive to paid plans'); return; }
       setFeatureModal({ visible: true, type: action });
       setFeatureInput('');
+    } else if (action === 'search') {
+      setFeatureModal({ visible: true, type: 'search' });
+      setFeatureInput('');
     } else {
       Alert.alert(lang === 'ar' ? 'ميزة' : 'Feature', lang === 'ar' ? 'قيد التطوير' : 'Coming soon');
     }
-  }, [send, lang, handleCamera]);
+  }, [send, lang, handleCamera, isFree]);
 
   const handleFeatureSend = () => {
     const prompts: Record<string, string> = {
@@ -234,13 +254,13 @@ export default function Chat() {
     return (
       <Animated.View style={[s.msgRow, isUser ? s.userRow : s.twinRow, index === chatHistory.length - 1 && { opacity: fadeAnim }]}>
         {!isUser && <TwinAvatar gender={twinGender} size={28} />}
-        <View style={[s.bubble, isUser ? s.userBubble : s.twinBubble, !isUser && { marginLeft: 8 }]}>
+        <View style={[s.bubble, isUser ? s.userBubble : s.twinBubble, !isUser && { marginLeft: 8 }, isDark && !isUser && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
           {item.image ? <RNImage source={{ uri: `data:image/jpeg;base64,${item.image}` }} style={{ width: 200, height: 200, borderRadius: 12, marginBottom: 4 }} /> : null}
-          <Text style={isUser ? s.userText : s.twinText}>{item.content}</Text>
+          <Text style={isUser ? s.userText : [s.twinText, isDark && { color: '#E0E0E0' }]}>{item.content}</Text>
         </View>
       </Animated.View>
     );
-  }, [chatHistory.length, twinGender, fadeAnim]);
+  }, [chatHistory.length, twinGender, fadeAnim, isDark]);
 
   const ListEmpty = useCallback(() => (
     <View style={s.welcomeWrap}>
@@ -273,10 +293,10 @@ export default function Chat() {
   const attachOpacity = attachAnim.interpolate({ inputRange: [0, 0.5, 1], outputRange: [0, 0.5, 1] });
 
   return (
-    <View style={[s.root, { paddingTop: insets.top, backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#1A1A1A' : '#FFFFFF'} />
+    <View style={[s.root, { paddingTop: insets.top, backgroundColor: isDark ? '#1A1A1A' : '#F8F6F2' }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#1A1A1A' : '#F8F6F2'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* الهيدر */}
+        {/* الهيدر المُصمم */}
         <View style={[s.header, isDark && { backgroundColor: '#1A1A1A', borderBottomColor: '#333' }]}>
           <View style={s.headerLeft}>
             <AnimBtn onPress={openMenu} style={s.menuBtn}><Menu size={22} stroke={isDark ? '#FFF' : '#1A1A1A'} /></AnimBtn>
@@ -287,14 +307,16 @@ export default function Chat() {
             </View>
           </View>
           <View style={s.headerRight}>
-            <View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }]}>
-              <Text style={s.statusIcon}>💜</Text>
+            {/* مؤشر الترابط مع أنيميشن */}
+            <Animated.View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }, { transform: [{ scale: bondGlow }] }]}>
+              <Heart size={14} stroke={isDark ? '#D8B4FE' : '#6B21A8'} fill={isDark ? '#D8B4FE' : '#6B21A8'} />
               <Text style={[s.statusText, isDark && { color: '#D8B4FE' }]}>{Math.round(bondLevel)}%</Text>
-            </View>
-            <View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }]}>
-              <Text style={s.statusIcon}>⚡</Text>
-              <Text style={[s.statusText, isDark && { color: '#D8B4FE' }]}>{Math.round(energy)}%</Text>
-            </View>
+            </Animated.View>
+            {/* مؤشر الطاقة مع أنيميشن نبضي */}
+            <Animated.View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }, { transform: [{ scale: energyPulse }] }]}>
+              <Zap size={14} stroke={isDark ? '#F59E0B' : '#F59E0B'} fill={isDark ? '#F59E0B' : '#F59E0B'} />
+              <Text style={[s.statusText, isDark && { color: '#F59E0B' }]}>{Math.round(energy)}%</Text>
+            </Animated.View>
             <AnimBtn onPress={() => setSoundEnabled(prev => !prev)} style={s.iconBtn}>
               {soundEnabled ? <Volume2 size={20} stroke={isDark ? '#D8B4FE' : '#6B21A8'} /> : <VolumeX size={20} stroke="#999" />}
             </AnimBtn>
@@ -372,7 +394,7 @@ export default function Chat() {
           </TouchableOpacity>
         </Modal>
 
-        {/* نافذة الميزات المنبثقة (بحث، تدريب، أحلام) */}
+        {/* نافذة الميزات المنبثقة */}
         <Modal visible={featureModal.visible} transparent animationType="fade" onRequestClose={() => setFeatureModal({ visible: false, type: '' })}>
           <View style={s.featureOverlay}>
             <View style={[s.featureContainer, isDark && { backgroundColor: '#2A2A2A' }]}>
@@ -416,9 +438,8 @@ const s = StyleSheet.create({
   onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: '#10B981' },
   onlineText: { fontSize: 11, color: '#10B981', fontWeight: '500' },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F0FF', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 10 },
-  statusIcon: { fontSize: 12, marginRight: 2 },
-  statusText: { fontSize: 11, fontWeight: '600', color: '#6B21A8' },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F3F0FF', paddingHorizontal: 6, paddingVertical: 4, borderRadius: 10, shadowColor: '#6B21A8', shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
+  statusText: { fontSize: 11, fontWeight: '600', color: '#6B21A8', marginLeft: 4 },
   iconBtn: { padding: 8 },
   crownBtn: { padding: 6 },
   listContent: { paddingHorizontal: 14, paddingVertical: 12, flexGrow: 1 },
@@ -426,12 +447,12 @@ const s = StyleSheet.create({
   welcomeEmoji: { fontSize: 44, marginBottom: 10 },
   welcomeText: { fontSize: 16, color: '#1A1A1A', fontWeight: '600', textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
   suggestRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
-  suggestBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F0FF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#E0D9F5' },
+  suggestBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#F3F0FF', borderRadius: 20, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#E0D9F5', shadowColor: '#6B21A8', shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
   suggestText: { fontSize: 13, color: '#6B21A8', fontWeight: '600' },
   msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
   userRow: { justifyContent: 'flex-end' },
   twinRow: { justifyContent: 'flex-start' },
-  bubble: { maxWidth: '75%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  bubble: { maxWidth: '75%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 6, elevation: 3 },
   userBubble: { backgroundColor: '#6B21A8', borderBottomRightRadius: 4 },
   twinBubble: { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#EFEFEF' },
   userText: { color: '#FFF', fontSize: 15, lineHeight: 22 },
@@ -441,16 +462,15 @@ const s = StyleSheet.create({
   typingDots: { color: '#6B21A8', fontSize: 16, letterSpacing: 3 },
   inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0', gap: 6 },
   textInput: { flex: 1, backgroundColor: '#F8F8F8', color: '#1A1A1A', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22, fontSize: 15, maxHeight: 100, minHeight: 44, borderWidth: 1, borderColor: '#EFEFEF' },
-  sendBtn: { backgroundColor: '#6B21A8', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  sendBtn: { backgroundColor: '#6B21A8', width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center', shadowColor: '#6B21A8', shadowOpacity: 0.3, shadowRadius: 4, elevation: 4 },
+  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
   sidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 300 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
   attachMenu: { flexDirection: 'row', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, justifyContent: 'space-around', flexWrap: 'wrap', backgroundColor: '#FFF' },
   attachItem: { alignItems: 'center', gap: 6 },
   attachLabel: { fontSize: 12, color: '#666' },
-  // أنماط النافذة المنبثقة
   featureOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  featureContainer: { width: '85%', backgroundColor: '#FFF', borderRadius: 16, padding: 20 },
+  featureContainer: { width: '85%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 8 },
   featureHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   featureTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
   featureInput: { backgroundColor: '#F8F8F8', borderRadius: 12, padding: 14, fontSize: 15, minHeight: 80, textAlignVertical: 'top', marginBottom: 12, borderWidth: 1, borderColor: '#EFEFEF' },
