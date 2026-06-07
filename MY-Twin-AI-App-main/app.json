@@ -78,7 +78,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "4853af19-954a-4801-8f7c-e94604503bee"
+        "projectId": "88b920cd-0f02-4dac-85a9-724ea9282879"
       }
     },
     "runtimeVersion": {
@@ -87,6 +87,6 @@
     "updates": {
       "url": "https://u.expo.dev/b5e2baa3-6015-40a5-9f31-115298d3b0c9"
     },
-    "owner": "soulsync.ai"
+    "owner": "soulsync.co"
   }
 }
