@@ -12,9 +12,7 @@ groq_client = OpenAI(
 ) if GROQ_API_KEY else None
 
 def call_groq(prompt: str, temperature: float = 0.7, max_tokens: int = 300) -> Optional[str]:
-    """استدعاء Groq (Llama 3.3) وإرجاع النص."""
     if not groq_client:
-        logger.warning("Groq client not available")
         return None
     try:
         resp = groq_client.chat.completions.create(

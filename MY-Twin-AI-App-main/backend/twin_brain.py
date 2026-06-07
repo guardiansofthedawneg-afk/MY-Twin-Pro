@@ -10,19 +10,23 @@ from cost_optimizer import cost_optimizer
 from dream_engine import analyze_dream
 from growth_tracker import track_growth
 from personal_knowledge_graph import get_knowledge_context, extract_entities
+try:
+    from twin_brain_limits import FREE_LIMITS
+except ImportError:
+    FREE_LIMITS = {} 
 
 logger = logging.getLogger("twin_brain")
 
 class TwinBrain:
     EMOJI_MAP = {
         "joy": ["😊", "😄", "💫", "✨", "🌟", "🥳", "🎉", "💖"],
-        "sadness": ["💜", "🫂", "🌧️", "💙", "🥺", "🤗", "🌸"],
-        "anger": ["😤", "💪", "🔥", "⚡", "🧘", "🌿"],
-        "fear": ["🫶", "💜", "🤝", "🔒", "️", "✨"],
-        "love": ["💕", "💗", "💝", "🥰", "💌", "🫶", "💖", "🌸"],
+        "sadness": ["💜", "🫂", "🌧️", "💙", "", "🤗", "🌸"],
+        "anger": ["😤", "", "🔥", "⚡", "🧘", "🌿"],
+        "fear": ["🫶", "💜", "🤝", "", "️", "✨"],
+        "love": ["💕", "", "💝", "", "💌", "🫶", "💖", "🌸"],
         "surprise": ["😮", "🤩", "💡", "🎯", "🔮", "✨"],
-        "neutral": ["💜", "🌸", "✨", "💭", "🤍", "🌙"],
-        "support": ["💪", "🤝", "💜", "🫶", "✨", "🌟"],
+        "neutral": ["💜", "", "✨", "", "🤍", "🌙"],
+        "support": ["💪", "🤝", "", "🫶", "✨", "🌟"],
     }
 
     def __init__(self, gemini_key=None):
@@ -30,14 +34,15 @@ class TwinBrain:
         try:
             genai.configure(api_key=key)
             self.gemini = genai.GenerativeModel("gemini-2.0-flash")
-        except:
+        except Exception:
             self.gemini = None
         try:
             self.multi = MultiAIClient()
-        except:
+        except Exception:
             self.multi = None
         self.emotion_tracker = EmotionalStateTracker()
         self.reasoning_engine = ReasoningEngine(gemini_key)
+        self.twin_name = "MyTwin" 
         self.fallback_replies = [
             "والله إني معاك، كمل كلامك متوقفش 💜",
             "حاسس بيك، إيه اللي شاغل بالك بالظبط؟",
@@ -47,8 +52,9 @@ class TwinBrain:
 
     async def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            return await self.emotion_tracker.analyze(text)
-        except:
+            # ✅ إصلاح: إزالة await لأن analyze دالة متزامنة (غير async)
+            return self.emotion_tracker.analyze(text)
+        except Exception:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
 
     # ========== Agentic Tool Executor ==========
@@ -90,11 +96,9 @@ class TwinBrain:
                         "reply": f"🌙 تفسير حلمك:\n{dream_result.get('interpretation', '')}\n\n💭 سؤال للتأمل: {dream_result.get('reflection_question', '')}",
                         "emotion": {}, "importance": 0.7, "provider": "dream_engine", "latency_ms": 0
                     }
-
             # Coaching Session
             elif tool_name == "coaching_session":
-                # يمكن تطويعها كنوع خاص من الـ Prompt لاحقًا
-                return None  # نمررها للـ LLM العادي
+                return None 
 
             # Weather
             elif tool_name == "weather":
@@ -192,7 +196,6 @@ class TwinBrain:
         - كلامك طبيعي زي ما بتكلم صاحبك القريب. متتكلمش زي الكتب أو الروبوتات.
         - استخدم كلمات وتعبيرات شبابية كتير: 'والله'، 'يا صاحبي'، 'فاهمك'، 'حبيت أقولك'، 'على فكرة'، 'يا سلام'، 'متخافش'، 'كمل'.
         - خليك مختصر ومباشر، لكن عميق. متلفش وتدور كتير.
-
         ## قلبك وعقلك
         - لو اللي قدامك حزين، إحضنه بكلامك. قوله إنك حاسس بيه، وإنك معاه. متديش نصايح طول ما هو بيحكي، استنى لما يهدى.
         - لو فرحان، فرح معاه. خليك طاير من الفرحة زيه.
@@ -212,7 +215,6 @@ class TwinBrain:
         return system_prompt
 
     # ========== الرد الرئيسي (Agentic) ==========
-from twin_brain_limits import FREE_LIMITS
     async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None, tier="free"):
         lang = "ar" if country_code in ["SA", "EG", "AE", "KW", "QA", "BH", "OM", "JO", "LB", "SY", "IQ", "YE", "PS", "MA", "DZ", "TN", "LY", "SD"] else "en"
 
@@ -236,14 +238,13 @@ from twin_brain_limits import FREE_LIMITS
                 resp = tool_result
                 resp["new_bond"] = bond_level
                 return resp
-            # إذا فشلت الأداة، نكمل بالرد العادي
 
         # Memory Context
         memory_context = ""
         if user_id:
             try:
                 memory_context = await get_memory_context(user_id)
-            except:
+            except Exception:
                 pass
 
         # Consciousness Context
@@ -260,7 +261,7 @@ from twin_brain_limits import FREE_LIMITS
                     "identity": consciousness.identity
                 }
                 await consciousness.save_state(user_id)
-            except:
+            except Exception:
                 pass
 
         # Personal Knowledge Context
@@ -269,7 +270,7 @@ from twin_brain_limits import FREE_LIMITS
             try:
                 knowledge_context = await get_knowledge_context(user_id)
                 asyncio.create_task(extract_entities(user_id, message, lang))
-            except:
+            except Exception:
                 pass
 
         # Build Prompt
@@ -294,6 +295,7 @@ from twin_brain_limits import FREE_LIMITS
             except AIUnavailable:
                 reply = random.choice(self.fallback_replies)
             except Exception as e:
+                logger.error(f"MultiAI Error: {e}")
                 reply = random.choice(self.fallback_replies)
                 provider = "crash_log"
 
