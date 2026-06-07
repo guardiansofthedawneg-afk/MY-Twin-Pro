@@ -224,9 +224,47 @@ async def del_acc(uid: str = Depends(get_user)):
 async def get_consciousness(uid: str = Depends(get_user)):
     return consciousness.get_consciousness_state()
 
+# ========== AI Stats ==========
+@app.get("/api/stats")
+async def get_ai_stats(uid: str = Depends(get_user)):
+    try:
+        today = date.today().isoformat()
+        usage_res = db.table("daily_usage").select("messages").eq("user_id", uid).eq("date", today).single().execute()
+        daily_usage = usage_res.data.get("messages", 0) if usage_res.data else 0
+        
+        mem_res = db.table("memories").select("id", count="exact").eq("user_id", uid).execute()
+        total_memories = mem_res.count or 0
+        
+        return {
+            "daily_requests": daily_usage,
+            "total_memories": total_memories,
+            "active_models": 8,
+            "avg_latency": "450ms"
+        }
+    except Exception as e:
+        logger.error(f"Stats error: {e}")
+        return {"error": "unavailable"}
+
+# ========== Proactive Check ==========
+@app.get("/api/proactive/check")
+async def proactive_check(uid: str = Depends(get_user)):
+    try:
+        should_send = proactive_engine.should_send_proactive(uid)
+        return {"should_send": should_send, "user_id": uid}
+    except Exception as e:
+        logger.error(f"Proactive check error: {e}")
+        return {"error": "unavailable"}
+
 # ========== Limits Tracking ==========
 @app.get("/api/limits/check")
 async def check_limits(uid: str = Depends(get_user), feature: str = ""):
-    """التحقق من استخدام الباقة المجانية لميزة معينة"""
-    # TODO: ربطها بـ Supabase
-    return {"feature": feature, "remaining": 2 if feature == "youtube" else 0}
+    try:
+        today = date.today().isoformat()
+        usage_res = db.table("daily_usage").select("messages").eq("user_id", uid).eq("date", today).single().execute()
+        used = usage_res.data.get("messages", 0) if usage_res.data else 0
+        limit = 10 if feature == "youtube" else 0
+        remaining = max(0, limit - used)
+        return {"feature": feature, "remaining": remaining, "used": used, "limit": limit}
+    except Exception as e:
+        logger.error(f"Limits check error: {e}")
+        return {"feature": feature, "remaining": 0}

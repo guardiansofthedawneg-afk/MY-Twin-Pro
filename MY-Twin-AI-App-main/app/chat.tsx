@@ -6,6 +6,7 @@ import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import * as Localization from 'expo-localization';
+import { supabase } from '../lib/supabase';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
@@ -73,7 +74,7 @@ type ChatMessage = { role: 'user' | 'twin'; content: string; image?: string };
 
 export default function Chat() {
   const insets = useSafeAreaInsets();
-  const { twinName, twinGender, tier, bondLevel, energy, relationshipDims, chatHistory, addMessage, updateBond, updateRelationshipDims, calmMode, triggerHaptic, lang, theme } = useTwinStore();
+  const { userId, twinName, twinGender, tier, bondLevel, energy, relationshipDims, chatHistory, addMessage, updateBond, updateRelationshipDims, calmMode, triggerHaptic, lang, theme, setTwinName, setTwinGender } = useTwinStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
@@ -94,6 +95,26 @@ export default function Chat() {
   const suggestions = getSuggestions(lang);
   const isFree = tier === 'free';
   const isDark = theme === 'dark';
+
+  // --- قراءة بيانات التوأم من Supabase عند فتح التطبيق ---
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('twin_name, twin_gender')
+          .eq('id', userId)
+          .single();
+        if (profile) {
+          if (profile.twin_name) setTwinName(profile.twin_name);
+          if (profile.twin_gender) setTwinGender(profile.twin_gender);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch profile data:', e);
+      }
+    };
+    fetchProfile();
+  }, [userId]);
 
   // --- مؤشرات متحركة (طاقة وترابط) ---
   useEffect(() => {
@@ -170,7 +191,7 @@ export default function Chat() {
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
 
-      // ✅ TTS مباشر (إصلاح: استدعاء مع pitch و rate فقط)
+      // ✅ TTS مباشر (باستخدام import في البداية)
       if (soundEnabled) {
         try {
           await speakResponse(res.data.reply, {
@@ -294,7 +315,6 @@ export default function Chat() {
     <View style={[s.root, { paddingTop: insets.top, backgroundColor: isDark ? '#1A1A1A' : '#F8F6F2' }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#1A1A1A' : '#F8F6F2'} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {/* الهيدر المُصمم */}
         <View style={[s.header, isDark && { backgroundColor: '#1A1A1A', borderBottomColor: '#333' }]}>
           <View style={s.headerLeft}>
             <AnimBtn onPress={openMenu} style={s.menuBtn}><Menu size={22} stroke={isDark ? '#FFF' : '#1A1A1A'} /></AnimBtn>
@@ -305,12 +325,10 @@ export default function Chat() {
             </View>
           </View>
           <View style={s.headerRight}>
-            {/* مؤشر الترابط مع أنيميشن */}
             <Animated.View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }, { transform: [{ scale: bondGlow }] }]}>
               <Heart size={14} stroke={isDark ? '#D8B4FE' : '#6B21A8'} fill={isDark ? '#D8B4FE' : '#6B21A8'} />
               <Text style={[s.statusText, isDark && { color: '#D8B4FE' }]}>{Math.round(bondLevel)}%</Text>
             </Animated.View>
-            {/* مؤشر الطاقة مع أنيميشن نبضي */}
             <Animated.View style={[s.statusBadge, isDark && { backgroundColor: '#2A2A2A' }, { transform: [{ scale: energyPulse }] }]}>
               <Zap size={14} stroke={isDark ? '#F59E0B' : '#F59E0B'} fill={isDark ? '#F59E0B' : '#F59E0B'} />
               <Text style={[s.statusText, isDark && { color: '#F59E0B' }]}>{Math.round(energy)}%</Text>
@@ -324,10 +342,8 @@ export default function Chat() {
           </View>
         </View>
 
-        {/* قائمة المحادثة */}
         <FlatList ref={flatRef} data={chatHistory} keyExtractor={(_, i) => i.toString()} renderItem={renderMsg} ListEmptyComponent={ListEmpty} contentContainerStyle={s.listContent} onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })} removeClippedSubviews initialNumToRender={15} />
 
-        {/* مؤشر الكتابة */}
         {loading && (
           <View style={s.typingRow}>
             <TwinAvatar gender={twinGender} size={22} />
@@ -337,7 +353,6 @@ export default function Chat() {
           </View>
         )}
 
-        {/* شريط الإدخال */}
         <View style={[s.inputBar, { paddingBottom: insets.bottom + 8 }, isDark && { backgroundColor: '#1A1A1A', borderTopColor: '#333' }]}>
           <AnimBtn onPress={() => setShowAttach(true)} style={s.iconBtn}><Paperclip size={20} stroke={isDark ? '#D8B4FE' : '#999'} /></AnimBtn>
           {!isFree && (
@@ -362,7 +377,6 @@ export default function Chat() {
           ) : <View style={{ width: 42 }} />}
         </View>
 
-        {/* القائمة الجانبية */}
         <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
           <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={closeMenu}>
             <Animated.View style={[s.sidebar, { transform: [{ translateX: slideAnim }] }, isDark && { backgroundColor: '#1A1A1A' }]}>
@@ -371,7 +385,6 @@ export default function Chat() {
           </TouchableOpacity>
         </Modal>
 
-        {/* قائمة المرفقات */}
         <Modal visible={showAttach} transparent animationType="none" onRequestClose={() => setShowAttach(false)}>
           <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setShowAttach(false)}>
             <Animated.View style={[s.attachMenu, { transform: [{ translateY: attachTranslateY }], opacity: attachOpacity }, isDark && { backgroundColor: '#2A2A2A' }]}>
@@ -392,7 +405,6 @@ export default function Chat() {
           </TouchableOpacity>
         </Modal>
 
-        {/* نافذة الميزات المنبثقة */}
         <Modal visible={featureModal.visible} transparent animationType="fade" onRequestClose={() => setFeatureModal({ visible: false, type: '' })}>
           <View style={s.featureOverlay}>
             <View style={[s.featureContainer, isDark && { backgroundColor: '#2A2A2A' }]}>
