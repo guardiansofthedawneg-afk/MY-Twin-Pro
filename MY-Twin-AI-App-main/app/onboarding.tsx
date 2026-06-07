@@ -1,4 +1,4 @@
-import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput, Animated } from 'react-native';
+import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput, Animated, Image } from 'react-native';
 import { router } from 'expo-router';
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
@@ -51,7 +51,7 @@ export default function Onboarding() {
   const [userName, setUserName] = useState('');
   const [twinName, setTwinName] = useState('');
   const [loading, setLoading] = useState(false);
-  const { userId, lang, theme } = useTwinStore();
+  const { userId, lang, theme, setTwinName: storeSetTwinName, setTwinGender: storeSetTwinGender } = useTwinStore();
   const isAr = lang === 'ar';
   const isDark = theme === 'dark';
   const questions = QUESTIONS[lang] || QUESTIONS['ar'];
@@ -83,7 +83,13 @@ export default function Onboarding() {
     setLoading(true);
     try {
       const analysis = analyzePersonality(answers, lang);
+      // ✅ تحديث المتجر (Store)
+      storeSetTwinName(twinName);
+      storeSetTwinGender(twinGender);
+      
       await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
+      
+      // ✅ إرسال تحليل الشخصية كأول رسالة في المحادثة
       await API.post('/api/chat', {
         message: isAr
           ? `مرحباً ${userName}! أنا ${twinName}. بناءً على إجاباتك، شخصيتك من نوع ${analysis.dominant_type}. سأكون مرآتك الحكيمة ورفيقك الدائم 💜`
@@ -111,7 +117,7 @@ export default function Onboarding() {
     <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
       <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
         <View style={s.logoCircle}>
-          <Heart size={40} stroke="#6B21A8" fill="#F3F0FF" />
+          <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
         </View>
       </Animated.View>
       <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
@@ -134,10 +140,10 @@ export default function Onboarding() {
       <ScrollView contentContainerStyle={{ flex: 1, padding: 24, justifyContent: 'center' }}>
         <TouchableOpacity style={s.skipBtn} onPress={skip}><Text style={s.skipText}>{isAr ? 'تخطي ←' : 'Skip →'}</Text></TouchableOpacity>
 
-        {/* شخصية التوأم المتحركة */}
+        {/* شعار التطبيق المتحرك */}
         <Animated.View style={{ transform: [{ scale }, { translateY }], alignSelf: 'center', marginBottom: 20 }}>
           <View style={s.mascotCircle}>
-            <MessageCircle size={36} stroke="#6B21A8" fill="#F3F0FF" />
+            <Image source={require('../assets/icon.png')} style={{ width: 36, height: 36 }} resizeMode="contain" />
           </View>
         </Animated.View>
 

@@ -1,8 +1,8 @@
 """
-MyTwin – Emotional Engine v6.0 (LLM‑Powered)
-- يستخدم Gemini لتصنيف المشاعر بدلاً من الكلمات المفتاحية
-- يُرجع JSON كاملاً: emotion, intensity, needs, risk
+MyTwin – Emotional Engine v6.1 (Fixed Version)
+- يستخدم Gemini لتصنيف المشاعر
 - يدعم العربية والإنجليزية
+- متوافق مع twin_brain.py و consciousness_core.py
 """
 import os, logging, asyncio, json
 from typing import Dict, Any, Optional
@@ -21,14 +21,6 @@ class EmotionalStateTracker:
         self.emotion_history: list = []
 
     async def analyze(self, text: str, lang: str = "ar") -> Dict[str, Any]:
-        """
-        تحليل المشاعر باستخدام Gemini LLM.
-        يُرجع قاموساً يحتوي على:
-        - primary: المشاعر الأساسية
-        - intensity: شدة المشاعر (0-1)
-        - needs: احتياجات المستخدم (support, advice, just_listen...)
-        - risk: مستوى الخطر (low, medium, high)
-        """
         if not self.model or not text.strip():
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False, "needs": "general", "risk": "low"}
 
@@ -48,7 +40,6 @@ JSON:"""
             loop = asyncio.get_running_loop()
             resp = await loop.run_in_executor(None, lambda: self.model.generate_content(prompt))
             if resp and resp.text:
-                # تنظيف الرد (قد يحتوي على نصوص إضافية)
                 raw = resp.text.strip()
                 if raw.startswith("```json"):
                     raw = raw.split("```json")[1].split("```")[0].strip()
@@ -66,7 +57,6 @@ JSON:"""
         return {"primary": "neutral", "intensity": 0.5, "needs_support": False, "needs": "general", "risk": "low"}
 
     def _fallback_analyze(self, text: str, lang: str = "ar") -> Dict[str, Any]:
-        """احتياطي: تحليل سريع باستخدام الكلمات المفتاحية"""
         text_lower = text.lower()
         keywords = {
             "joy": ["سعيد", "فرح", "مبسوط", "happy", "joy", "glad", "great"],
