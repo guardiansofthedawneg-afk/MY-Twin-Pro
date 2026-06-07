@@ -161,7 +161,7 @@ export default function Chat() {
 
   const countryCode = (Localization.region || 'SA').toUpperCase();
 
-  // --- دالة الإرسال المركزية (محسنة مع TTS مباشر) ---
+  // --- دالة الإرسال المركزية (محسنة: إظهار الرد قبل الصوت) ---
   const send = useCallback(async (msg?: string, imageBase64?: string) => {
     const message = (msg || input).trim();
     if (!message && !imageBase64) return;
@@ -186,12 +186,13 @@ export default function Chat() {
           'X-Twin-Gender': twinGender,
         },
       });
+      // ✅ أولاً: إظهار الرد على الشاشة
       addMessage('twin', res.data.reply);
       updateBond(res.data.new_bond ?? bondLevel);
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
 
-      // ✅ TTS مباشر (باستخدام import في البداية)
+      // ✅ ثانياً: قراءة الرد بصوت (بعد أن يظهر على الشاشة)
       if (soundEnabled) {
         try {
           await speakResponse(res.data.reply, {

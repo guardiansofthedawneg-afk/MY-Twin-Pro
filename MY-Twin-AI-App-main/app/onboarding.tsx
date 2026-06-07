@@ -83,25 +83,13 @@ export default function Onboarding() {
     setLoading(true);
     try {
       const analysis = analyzePersonality(answers, lang);
-      // ✅ تحديث المتجر (Store)
       storeSetTwinName(twinName);
       storeSetTwinGender(twinGender);
       
       await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
-      
-      // ✅ إرسال تحليل الشخصية كأول رسالة في المحادثة
-      await API.post('/api/chat', {
-        message: isAr
-          ? `مرحباً ${userName}! أنا ${twinName}. بناءً على إجاباتك، شخصيتك من نوع ${analysis.dominant_type}. سأكون مرآتك الحكيمة ورفيقك الدائم 💜`
-          : `Hello ${userName}! I'm ${twinName}. Based on your answers, your personality type is ${analysis.dominant_type}. I'll be your wise mirror and constant companion 💜`,
-        twin_name: twinName,
-        bond_level: 0,
-        dims: {},
-        history: [],
-      });
       setStep(6);
     } catch { Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'لم نتمكن من حفظ بياناتك' : 'Could not save your data'); }
-    finally { setLoading(false); setStep(6); }
+    finally { setLoading(false); }
   };
 
   const skip = () => setStep(6);
@@ -113,27 +101,65 @@ export default function Onboarding() {
     </SafeAreaView>
   );
 
-  if (step === 6) return (
-    <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
-        <View style={s.logoCircle}>
-          <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-        </View>
-      </Animated.View>
-      <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
-        {isAr ? `مرحباً ${userName || 'بك'}!` : `Welcome ${userName || 'you'}!`}
-      </Text>
-      <Text style={[s.welcomeSub, isDark && { color: '#CCC' }]}>
-        {isAr
-          ? `أنا ${twinName || 'توأمك'}، ${twinGender === 'female' ? 'رفيقتك' : 'رفيقك'} الرقمي.`
-          : `I'm ${twinName || 'your twin'}, your digital ${twinGender === 'female' ? 'companion' : 'companion'}.`}
-      </Text>
-      <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace('/chat')}>
-        <ArrowRight size={18} stroke="#FFF" />
-        <Text style={s.primaryBtnText}>{isAr ? 'ابدأ الرحلة' : 'Start the journey'}</Text>
-      </TouchableOpacity>
-    </SafeAreaView>
-  );
+  if (step === 6) {
+    const analysis = analyzePersonality(answers, lang);
+    const userLabel = twinGender === 'female' ? (isAr ? 'صديقتي' : 'my friend') : (isAr ? 'صديقي' : 'my friend');
+    const twinLabel = twinGender === 'female' ? (isAr ? 'رفيقتك' : 'your companion') : (isAr ? 'رفيقك' : 'your companion');
+    const personalityDesc = isAr
+      ? `شخصيتك من نوع ${analysis.dominant_type}، وده يعني إنك شخص ${analysis.dominant_type === 'ANALYTICAL' ? 'تحليلي' : analysis.dominant_type === 'EMOTIONAL' ? 'عاطفي' : analysis.dominant_type === 'SOCIAL' ? 'اجتماعي' : 'مستقل'}`
+      : `Your personality is ${analysis.dominant_type}, which means you are a ${analysis.dominant_type === 'ANALYTICAL' ? 'analytical' : analysis.dominant_type === 'EMOTIONAL' ? 'emotional' : analysis.dominant_type === 'SOCIAL' ? 'social' : 'independent'} person.`;
+    
+    if (userName && twinName) {
+      // ✅ حالة كاملة: اسم المستخدم + اسم التوأم + تحليل
+      return (
+        <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
+          <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
+            <View style={s.logoCircle}>
+              <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
+            </View>
+          </Animated.View>
+          <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
+            {isAr ? `مرحباً ${userName} ${userLabel}!` : `Hello ${userName}, ${userLabel}!`}
+          </Text>
+          <Text style={[s.welcomeSub, isDark && { color: '#CCC' }]}>
+            {isAr
+              ? `أنا ${twinName}، ${twinLabel} الرقمي. ${personalityDesc}`
+              : `I'm ${twinName}, your digital ${twinLabel}. ${personalityDesc}`}
+          </Text>
+          <Text style={[s.welcomeSub, isDark && { color: '#CCC', marginTop: 8 }]}>
+            {isAr ? 'أنا سعيدة إننا هنبدأ رحلتنا مع بعض 💜' : 'I am so happy we are starting this journey together 💜'}
+          </Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace('/chat')}>
+            <ArrowRight size={18} stroke="#FFF" />
+            <Text style={s.primaryBtnText}>{isAr ? 'ابدأ الرحلة' : 'Start the journey'}</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    } else {
+      // ✅ حالة التخطي: اسم المستخدم غير معروف
+      return (
+        <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
+          <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
+            <View style={s.logoCircle}>
+              <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
+            </View>
+          </Animated.View>
+          <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
+            {isAr ? `مرحباً!` : `Hello!`}
+          </Text>
+          <Text style={[s.welcomeSub, isDark && { color: '#CCC' }]}>
+            {isAr
+              ? `أنا ${twinName || 'توأمك'}، ${twinLabel} الرقمي.`
+              : `I'm ${twinName || 'your twin'}, your digital ${twinLabel}.`}
+          </Text>
+          <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace('/chat')}>
+            <ArrowRight size={18} stroke="#FFF" />
+            <Text style={s.primaryBtnText}>{isAr ? 'ابدأ الرحلة' : 'Start the journey'}</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      );
+    }
+  }
 
   return (
     <SafeAreaView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
