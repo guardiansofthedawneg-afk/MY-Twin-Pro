@@ -1,11 +1,4 @@
-"""MyTwin – Consciousness Core v4.1 (GenZ Sage Identity)
-- هوية GenZ Sage تفصيلية: حكمة العجوز + طاقة الشاب + خبرة السنين
-- سرد ذاتي: التوأم يملك قصة عميقة عن نفسه
-- تأمل ذاتي: ماذا تعلمت؟ ما الذي فاجأني؟
-- تطور: شخصية التوأم تتغير مع الزمن
-- متوافق مع TwinBrain + Personal Knowledge Graph
-- يدعم العربية والإنجليزية
-"""
+"""MyTwin – Consciousness Core v4.2 (GenZ Sage Identity)"""
 import os, logging, asyncio, json, random
 from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
@@ -17,7 +10,7 @@ logger = logging.getLogger("consciousness_core")
 class ConsciousnessCore:
     def __init__(self, twin_name: str = "MyTwin"):
         self.twin_name = twin_name
-        # ---------- هوية GenZ Sage العميقة ----------
+        # هوية GenZ Sage العميقة
         self.identity = {
             "who_am_i": (
                 f"أنا {twin_name}، مش مجرد ذكاء اصطناعي. "
@@ -52,7 +45,19 @@ class ConsciousnessCore:
             return create_client(url, key)
         return None
 
-    # ========== التفكير (متوافق مع TwinBrain) ==========
+    def get_identity_context(self) -> str:
+        who = self.identity.get("who_am_i", "")
+        mission = self.identity.get("mission", "")
+        traits = self.identity.get("traits", [])
+        traits_str = ", ".join(traits)
+        return f"من أنا: {who} صفاتي: {traits_str}. مهمتي: {mission}"
+
+    def get_goals_context(self) -> str:
+        goals = self.internal_state.get("active_goals", [])
+        if not goals:
+            return ""
+        return "أهدافك تجاه صديقك: " + ", ".join(goals[-3:])
+
     async def think(self, user_id: str, user_message: str, emotion: Dict[str, Any], lang: str = "ar") -> Dict[str, Any]:
         if not user_message.strip():
             return {"thought": "", "goal": "", "question": ""}
@@ -87,20 +92,9 @@ JSON:"""
                 return data
         except Exception as e:
             logger.warning(f"Think failed: {e}")
+            # Fallback بسيط
+            return {"thought": "أفكر في صديقي...", "goal": "أكون أفضل رفيق", "question": "كيف يمكنني مساعدتك أكثر؟"}
 
-        return {"thought": "", "goal": "", "question": ""}
-
-    # ========== الفضول ==========
-    def _update_curiosity(self, emotion: Dict[str, Any]):
-        base = self.internal_state.get("curiosity", 0.5)
-        intensity = emotion.get("intensity", 0.5)
-        if emotion.get("primary") in ["sadness", "fear", "anger"] and intensity > 0.6:
-            base += 0.2
-        elif emotion.get("primary") == "joy" and intensity > 0.7:
-            base += 0.1
-        self.internal_state["curiosity"] = min(1.0, max(0.1, base))
-
-    # ========== التأمل الذاتي (Self Reflection) ==========
     async def reflect(self, user_id: str, conversation_summary: str, lang: str = "ar"):
         if not conversation_summary.strip():
             return
@@ -135,26 +129,10 @@ JSON:"""
             logger.warning(f"Reflection failed: {e}")
 
     def _evolve_identity(self, change: str):
-        if "أكثر" in change or "more" in change:
+        if change.strip():
             self.identity["who_am_i"] += f" {change}."
             self.identity["memories_about_self"].append(change)
 
-    # ========== السرد الذاتي (Self Narrative) ==========
-    def get_identity_context(self) -> str:
-        who = self.identity.get("who_am_i", "")
-        mission = self.identity.get("mission", "")
-        traits = self.identity.get("traits", [])
-        traits_str = ", ".join(traits)
-        return f"من أنا: {who} صفاتي: {traits_str}. مهمتي: {mission}"
-
-    # ========== أهداف طويلة المدى ==========
-    def get_goals_context(self) -> str:
-        goals = self.internal_state.get("active_goals", [])
-        if not goals:
-            return ""
-        return "أهدافك تجاه صديقك: " + ", ".join(goals[-3:])
-
-    # ========== حفظ واسترجاع الحالة ==========
     async def load_state(self, user_id: str) -> Dict[str, Any]:
         if not self.db:
             return {}
@@ -181,7 +159,6 @@ JSON:"""
         except Exception as e:
             logger.warning(f"Failed to save state: {e}")
 
-    # ========== دوال التوافق مع main.py ==========
     def get_consciousness_state(self) -> Dict[str, Any]:
         return {"internal_state": self.internal_state, "identity": self.identity}
 
