@@ -170,14 +170,12 @@ export default function Chat() {
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
 
-      // ✅ TTS مباشر (باستخدام import في البداية)
+      // ✅ TTS مباشر (إصلاح: استدعاء مع pitch و rate فقط)
       if (soundEnabled) {
         try {
           await speakResponse(res.data.reply, {
-            tier: tier,
-            country_code: countryCode,
-            gender: twinGender,
-            emotion: res.data?.emotion?.primary || 'neutral',
+            pitch: 1.0,
+            rate: 1.0,
           });
         } catch (e) {
           console.log('TTS playback failed:', e);
@@ -188,7 +186,7 @@ export default function Chat() {
       if (status === 401) addMessage('twin', lang === 'ar' ? 'انتهت جلستك 🔒' : 'Session expired 🔒');
       else addMessage('twin', lang === 'ar' ? 'تعذر الاتصال 😔' : 'Connection failed 😔');
     } finally { setLoading(false); }
-  }, [input, loading, twinName, bondLevel, relationshipDims, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender, tier, countryCode]);
+  }, [input, loading, twinName, bondLevel, relationshipDims, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender, countryCode]);
 
   // --- الكاميرا ---
   const handleCamera = useCallback(async () => {
