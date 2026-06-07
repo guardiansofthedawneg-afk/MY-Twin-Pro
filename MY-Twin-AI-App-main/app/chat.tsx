@@ -10,6 +10,7 @@ import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
 import { Mic, MicOff, Paperclip, Crown, Smile, Target, Brain, PenTool, Menu, Volume2, VolumeX, Image, FileText, Search, Dumbbell, MoonStar, Send, Camera, X, Sparkles, Heart, Zap } from 'lucide-react-native';
+import { speakResponse } from '../utils/voice_engine';
 
 function TwinAvatar({ gender, size = 40 }: { gender: string; size?: number }) {
   const isFemale = gender === 'female';
@@ -169,10 +170,9 @@ export default function Chat() {
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
       if (res.data?.importance > 0.7) Alert.alert('✨', lang === 'ar' ? 'تم حفظ ذكرى' : 'Memory saved');
 
-      // ✅ TTS مباشر (بدون انتظار حقل tts)
+      // ✅ TTS مباشر (باستخدام import في البداية)
       if (soundEnabled) {
         try {
-          const { speakResponse } = require('../utils/voice_engine');
           await speakResponse(res.data.reply, {
             tier: tier,
             country_code: countryCode,
