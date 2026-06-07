@@ -3,7 +3,26 @@ import { router, Href } from 'expo-router';
 import { useTwinStore } from '../store/useTwinStore';
 import { supabase } from '../lib/supabase';
 import { API } from '../lib/api';
-import { Moon, Sun, Globe, Crown, Target, HeartPulse, History, Shield, Download, LogOut, Trash2, Phone, BrainCircuit, Database, Cpu, HardDrive, Sparkles } from 'lucide-react-native';
+import { 
+  Moon, 
+  Sun, 
+  Globe, 
+  Crown, 
+  Target, 
+  HeartPulse, 
+  History, 
+  Shield, 
+  Download, 
+  LogOut, 
+  Trash2, 
+  Phone, 
+  BrainCircuit, 
+  Database, 
+  Cpu, 
+  HardDrive, 
+  Sparkles,
+  Zap
+} from 'lucide-react-native';
 
 type AppRoute = Href & ('/subscription'|'/goals'|'/mood'|'/timeline'|'/privacy'|'/help');
 
