@@ -52,7 +52,6 @@ class TwinBrain:
 
     async def detect_emotion(self, text: str) -> Dict[str, Any]:
         try:
-            # ✅ إصلاح: إزالة await لأن analyze دالة متزامنة (غير async)
             return self.emotion_tracker.analyze(text)
         except Exception:
             return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
@@ -220,10 +219,13 @@ class TwinBrain:
 
         # Cost Optimizer
         use_llm, reason = cost_optimizer.should_use_llm(message, tier)
+        # ✅ Force chat to work even if cost_optimizer fails
         if not use_llm:
             cached = cost_optimizer.get_cached_response(message)
             if cached:
                 return {"reply": cached, "new_bond": bond_level, "emotion": {}, "importance": 0.3, "provider": "cache", "latency_ms": 0}
+            # Force LLM use if no cached response
+            use_llm = True
 
         # Emotion & Agentic Reasoning
         emotion = await self.detect_emotion(message)
