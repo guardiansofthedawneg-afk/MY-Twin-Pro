@@ -1,33 +1,27 @@
 """
-MyTwin API v10.0 — متكامل وذكي
-يدمج جميع المحركات الجديدة: الأمان، الرحلة، التعلق، حدود موحدة
+MyTwin API v10.1 – يدعم البث المباشر (Streaming)
 """
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
 from fastapi import FastAPI, HTTPException, Request, Depends, Header
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from slowapi.errors import RateLimitExceeded
 from supabase import create_client, Client
 
-# المحركات الأساسية
 from twin_brain import TwinBrain
 from rate_limiter import limiter, rate_limit_exceeded_handler
 from cache import get as cache_get, set as cache_set
 from multi_ai import AIUnavailable
 from consciousness_core import ConsciousnessCore
-
-# المحركات الموحدة الجديدة
 from message_limits import (
     check_message_limit, check_tok, check_feature_usage,
     get_usage_summary, get_tier_features, activate_referral_bonus,
     add_referral_tok_bonus
 )
-
-# الخدمات الخارجية
 from external_services import (
     search_youtube, search_spotify, get_weather,
     get_todoist_tasks, get_calendar_events,
@@ -63,7 +57,7 @@ ALLOWED_ORIGINS = [
     "exp://192.168.1.1:19000"
 ]
 
-app = FastAPI(title="MyTwin API", version="10.0.0")
+app = FastAPI(title="MyTwin API", version="10.1.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
@@ -74,7 +68,7 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
-# ========== المصادقة ==========
+# المصادقة
 def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
@@ -100,7 +94,6 @@ def get_profile(uid: str) -> dict:
         logger.error(f"Profile fetch failed: {e}")
         return {}
 
-# ========== نماذج البيانات ==========
 class ChatReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     twin_name: str = Field("توأمك")
@@ -111,7 +104,7 @@ class ChatReq(BaseModel):
 class ReferralCodeReq(BaseModel):
     code: str = Field(..., min_length=2, max_length=20)
 
-# ========== نقطة النهاية الرئيسية: المحادثة ==========
+# ========== المحادثة العادية ==========
 @app.post("/api/chat")
 @limiter.limit("30/minute")
 async def chat(
@@ -127,9 +120,8 @@ async def chat(
     twin_gender = x_twin_gender or "female"
     p = get_profile(uid)
     tier = p.get("tier", "free")
-    signup_date = p.get("created_at")  # مهم لرحلة التوأم وأسبوع العسل
+    signup_date = p.get("created_at")
 
-    # 1. فحص الأمان أولاً
     from safety_engine import safety_engine
     safety_check = safety_engine.check_safety(body.message)
     if not safety_check["safe"] and safety_check["severity"] == "critical":
@@ -139,10 +131,8 @@ async def chat(
             "provider": "safety_engine"
         }
 
-    # 2. فحص حدود الرسائل
     allowed, remaining, reason = check_message_limit(uid, tier, signup_date)
     if not allowed:
-        from proactive_engine import proactive_engine
         await proactive_engine.trigger_daily_limit_notification(uid, tier, p.get("lang", "ar"))
         return JSONResponse(
             status_code=429,
@@ -154,14 +144,10 @@ async def chat(
             }
         )
 
-    # 3. المعالجة الرئيسية
     res = {}
     try:
-        # تجهيز قائمة آخر الرسائل لتحليل التعلق
         recent_msgs = [h.get("content", "") for h in body.history[-20:] if isinstance(h, dict)]
         recent_msgs.append(body.message)
-
-        # استدعاء الدماغ مع معلومات الرحلة والتعلق
         res = await brain.respond(
             message=body.message,
             twin_name=body.twin_name,
@@ -174,11 +160,10 @@ async def chat(
             country_code=country_code,
             user_id=uid,
             tier=tier,
-            join_date=signup_date,           # لرحلة التوأم
-            recent_messages=recent_msgs      # لتحليل التعلق
+            join_date=signup_date,
+            recent_messages=recent_msgs
         )
         if not isinstance(res, dict):
-            logger.error(f"Brain returned non-dict: {type(res)}")
             res = {"reply": "حدث خطأ تقني مؤقت 💜", "provider": "error_handler"}
     except AIUnavailable:
         res = {"reply": "أواجه ضغطاً تقنياً مؤقتاً، سأعود قريباً 💜", "provider": "fallback"}
@@ -186,14 +171,12 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
-    # 4. تحديث عداد الرسائل (بعد النجاح)
     try:
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
     except:
         pass
 
-    # 5. الرد النهائي مع معلومات إضافية
     return {
         "reply": res.get("reply", "..."),
         "new_bond": res.get("new_bond", 0),
@@ -206,7 +189,56 @@ async def chat(
         "attachment_style": res.get("attachment_style")
     }
 
-# ========== الإحالة ==========
+# ========== المحادثة بالبث المباشر ==========
+@app.post("/api/chat/stream")
+@limiter.limit("30/minute")
+async def chat_stream(
+    request: Request,
+    body: ChatReq,
+    uid: str = Depends(get_user),
+    calm: str = Header("false"),
+    x_country_code: str = Header("SA"),
+    x_twin_gender: str = Header("female")
+):
+    is_calm = calm.lower() == "true"
+    country_code = x_country_code or "SA"
+    p = get_profile(uid)
+    tier = p.get("tier", "free")
+    signup_date = p.get("created_at")
+
+    from safety_engine import safety_engine
+    safety_check = safety_engine.check_safety(body.message)
+    if not safety_check["safe"] and safety_check["severity"] == "critical":
+        return JSONResponse(content={"reply": safety_engine.HELPLINE_MESSAGE, "safety_alert": True})
+
+    allowed, remaining, reason = check_message_limit(uid, tier, signup_date)
+    if not allowed:
+        return JSONResponse(status_code=429, content={"error": "limit_reached"})
+
+    # بناء الـ prompt باستخدام prompt_builder
+    from prompt_builder import PromptBuilder
+    pb = PromptBuilder()
+    # استخراج العاطفة والمعلومات (نسخة مختصرة)
+    # نستخدم TwinBrain لتحليل العاطفة فقط، ثم نبني prompt يدوياً
+    # يمكن تحسينه لاحقاً
+    prompt = await pb.build(
+        twin_name=body.twin_name,
+        user_name="صديقي",
+        relationship={"label": "Friend", "bond_level": body.bond_level, "instruction": "Be supportive."},
+        emotion={"primary": "neutral", "intensity": 0.5},
+        voice={"style": "Warm", "pitch": 1.0, "rate": 1.0},
+        dialect={"dialect": "ar", "instruction": "Use modern Arabic naturally."},
+        user_id=uid
+    )
+    prompt += f"\nUser message: {body.message}\nYour response:"
+
+    async def token_generator():
+        async for token in brain.multi.stream_reply(prompt, "general"):
+            yield token
+
+    return StreamingResponse(token_generator(), media_type="text/plain")
+
+# ========== باقي المسارات (كما هي) ==========
 @app.post("/api/referral/generate")
 async def generate_referral(uid: str = Depends(get_user)):
     code = generate_referral_code(uid)
@@ -224,11 +256,10 @@ async def activate_referral_endpoint(body: ReferralCodeReq, uid: str = Depends(g
         if inviter_id:
             add_referral_tok_bonus(inviter_id)
             add_referral_tok_bonus(uid)
-            activate_referral_bonus(uid)  # رسائل إضافية
+            activate_referral_bonus(uid)
         return {"success": True, "bonus": 500}
     raise HTTPException(400, result.get("error", "invalid_code"))
 
-# ========== وظائف دورية ==========
 @app.post("/cron/proactive")
 async def cron_proactive(req: Request):
     key = req.headers.get("X-Cron-Key", "")
@@ -237,20 +268,16 @@ async def cron_proactive(req: Request):
     result = await proactive_engine.run_cron_job()
     return result
 
-# ========== الأحلام والنمو ==========
 @app.post("/api/dream/analyze")
 async def analyze_dream_endpoint(body: dict, uid: str = Depends(get_user)):
-    result = await analyze_dream(uid, body.get("dream", ""), body.get("lang", "ar"))
-    return result
+    return await analyze_dream(uid, body.get("dream", ""), body.get("lang", "ar"))
 
 @app.get("/api/growth/history")
 async def growth_history(uid: str = Depends(get_user)):
     return await get_growth_history(uid)
 
-# ========== الخدمات الخارجية ==========
 @app.get("/api/services/youtube")
 async def youtube_endpoint(query: str, lang: str = "ar", uid: str = Depends(get_user)):
-    # فحص الحد اليومي للميزة
     p = get_profile(uid)
     allowed, remaining = check_feature_usage(uid, p.get("tier", "free"), "youtube")
     if not allowed:
@@ -276,10 +303,9 @@ async def weather_endpoint(city: str = "Cairo", uid: str = Depends(get_user)):
     result = await get_weather(city)
     return {"result": result, "remaining": remaining} if result else {"error": "unavailable"}
 
-# ========== معلومات عامة ==========
 @app.get("/")
 async def root():
-    return {"status": "ok", "version": "10.0.0"}
+    return {"status": "ok", "version": "10.1.0"}
 
 @app.delete("/api/account")
 async def del_acc(uid: str = Depends(get_user)):
@@ -290,7 +316,6 @@ async def del_acc(uid: str = Depends(get_user)):
 async def get_consciousness(uid: str = Depends(get_user)):
     return consciousness.get_consciousness_state()
 
-# ========== الإحصائيات والحدود ==========
 @app.get("/api/stats")
 async def get_ai_stats(uid: str = Depends(get_user)):
     try:
@@ -298,7 +323,7 @@ async def get_ai_stats(uid: str = Depends(get_user)):
         summary = get_usage_summary(uid, p.get("tier", "free"), p.get("created_at"))
         return {
             "daily_requests": summary["messages"]["used"],
-            "total_memories": 0,  # يمكن ربطه لاحقاً
+            "total_memories": 0,
             "active_models": 8,
             "avg_latency": "450ms",
             "limits": summary
