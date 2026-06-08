@@ -1,19 +1,27 @@
-import os, re, random, logging, time, asyncio
+"""
+MyTwin – Twin Brain v3.0 (قائد الأوركسترا المطور)
+يدمج: Twin Journey + Attachment Engine + Safety Engine
+"""
+import os, random, logging, time, asyncio
 from typing import Optional, List, Dict, Any
-import google.generativeai as genai
+from datetime import datetime
+
 from multi_ai import MultiAIClient, AIUnavailable
 from emotional_engine import EmotionalStateTracker
 from dialect_engine import get_dialect_for_user, get_dialect_prompt
 from reasoning_engine import ReasoningEngine
-from memory_engine import get_memory_context
+from memory_graph import get_memory_context, store_mem, extract_entities
+from relationship_engine import RelationshipEngine
+from prompt_builder import PromptBuilder
+from consciousness_core import ConsciousnessCore
 from cost_optimizer import cost_optimizer
 from dream_engine import analyze_dream
 from growth_tracker import track_growth
-from personal_knowledge_graph import get_knowledge_context, extract_entities
-try:
-    from twin_brain_limits import FREE_LIMITS
-except ImportError:
-    FREE_LIMITS = {} 
+
+# 🆕 المحركات الجديدة
+from twin_journey import twin_journey, JourneyPhase
+from attachment_engine import attachment_engine
+from safety_engine import safety_engine
 
 logger = logging.getLogger("twin_brain")
 
@@ -30,274 +38,143 @@ class TwinBrain:
     }
 
     def __init__(self, gemini_key=None):
-        key = gemini_key or os.getenv("GEMINI_API_KEY")
-        try:
-            genai.configure(api_key=key)
-            self.gemini = genai.GenerativeModel("gemini-2.0-flash")
-        except Exception:
-            self.gemini = None
-        try:
-            self.multi = MultiAIClient()
-        except Exception:
-            self.multi = None
-        self.emotion_tracker = EmotionalStateTracker()
+        self.multi = MultiAIClient()
+        self.emotion_tracker = EmotionalStateTracker(gemini_key)
         self.reasoning_engine = ReasoningEngine(gemini_key)
-        self.twin_name = "MyTwin" 
+        self.relationship = RelationshipEngine()
+        self.prompt_builder = PromptBuilder()
+        self.consciousness = ConsciousnessCore(twin_name="MyTwin")
+        self.twin_name = "MyTwin"
         self.fallback_replies = [
             "والله إني معاك، كمل كلامك متوقفش 💜",
             "حاسس بيك، إيه اللي شاغل بالك بالظبط؟",
             "يا صاحبي أنا جنبك، قولي كل حاجة 🫶",
             "أنا سامعك، وعارف إنك تقدر تعدي أي حاجة ✨"
         ]
+        
+        # 🆕 تخزين تواريخ انضمام المستخدمين
+        self.user_join_dates = {}
 
     async def detect_emotion(self, text: str) -> Dict[str, Any]:
-        try:
-            return await self.emotion_tracker.analyze(text)
-        except Exception:
-            return {"primary": "neutral", "intensity": 0.5, "needs_support": False}
+        return await self.emotion_tracker.analyze(text)
 
-    # ========== Agentic Tool Executor ==========
-    async def execute_tool(self, tool_name: str, query: str, lang: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
-        """تنفيذ الأداة المختارة وإرجاع رد جاهز أو None إذا لم تكن هناك أداة."""
-        if tool_name == "none" or not query:
-            return None
+    async def respond(
+        self, message, twin_name, bond_level, dims, memories, history, 
+        calm=False, personality=None, country_code="SA", user_id=None, tier="free",
+        join_date: Optional[datetime] = None,  # 🆕 تاريخ الانضمام
+        recent_messages: Optional[List[str]] = None  # 🆕 آخر الرسائل لتحليل التعلق
+    ):
+        # 0. 🆕 فحص الأمان أولاً
+        safety_check = safety_engine.check_safety(message)
+        if not safety_check["safe"]:
+            if safety_check["severity"] == "critical":
+                return {
+                    "reply": safety_engine.HELPLINE_MESSAGE,
+                    "new_bond": bond_level,
+                    "emotion": {"primary": "concern", "intensity": 1.0},
+                    "provider": "safety_engine",
+                    "latency_ms": 0,
+                    "dialect": get_dialect_for_user(country_code, message),
+                    "safety_alert": True
+                }
+        
+        # 1. Emotion
+        emotion = await self.detect_emotion(message)
 
-        try:
-            # YouTube
-            if tool_name == "youtube":
-                from external_services import search_youtube
-                yt_result = await search_youtube(query, lang="ar")
-                if yt_result and isinstance(yt_result, list) and len(yt_result) > 0:
-                    video = yt_result[0]
-                    return {
-                        "reply": f"🎵 {video.get('title', '')}\n{video.get('url', '')}",
-                        "emotion": {}, "importance": 0.5, "provider": "youtube", "latency_ms": 0
-                    }
+        # 2. Reasoning & Planning
+        reasoning_result = await self.reasoning_engine.plan(message, emotion)
+        
+        # 3. Relationship Update
+        self.relationship.update(bond_change=0.2)
 
-            # Google Search
-            elif tool_name == "google_search":
-                if self.gemini:
-                    resp = self.gemini.generate_content(
-                        f"أجب بالعربية بناءً على بحث حديث: {query}",
-                        tools=[{"google_search": {}}]
-                    )
-                    if resp.text:
-                        return {
-                            "reply": resp.text,
-                            "emotion": {}, "importance": 0.5, "provider": "google_search", "latency_ms": 0
-                        }
+        # 4. Memory Context
+        memory_context = await get_memory_context(user_id) if user_id else ""
 
-            # Dream Engine
-            elif tool_name == "dream_engine":
-                dream_result = await analyze_dream(user_id or "anonymous", query, lang)
-                if dream_result:
-                    return {
-                        "reply": f"🌙 تفسير حلمك:\n{dream_result.get('interpretation', '')}\n\n💭 سؤال للتأمل: {dream_result.get('reflection_question', '')}",
-                        "emotion": {}, "importance": 0.7, "provider": "dream_engine", "latency_ms": 0
-                    }
-            # Coaching Session
-            elif tool_name == "coaching_session":
-                return None 
+        # 5. Consciousness Context
+        consciousness_context = {}
+        if user_id:
+            await self.consciousness.load_state(user_id)
+            thought_result = await self.consciousness.think(user_id, message, emotion)
+            consciousness_context = {
+                "last_thought": thought_result.get("thought", ""),
+                "active_goals": self.consciousness.internal_state.get("active_goals", []),
+                "identity": self.consciousness.identity
+            }
+            await self.consciousness.save_state(user_id)
 
-            # Weather
-            elif tool_name == "weather":
-                from external_services import get_weather
-                weather_result = await get_weather(query)
-                if weather_result:
-                    return {
-                        "reply": weather_result,
-                        "emotion": {}, "importance": 0.4, "provider": "weather", "latency_ms": 0
-                    }
-
-            # Memory Retrieval
-            elif tool_name == "memory_retrieval":
-                mem_context = await get_memory_context(user_id) if user_id else ""
-                if mem_context:
-                    return {
-                        "reply": f"ذاكرتي معاك:\n{mem_context}",
-                        "emotion": {}, "importance": 0.3, "provider": "memory_engine", "latency_ms": 0
-                    }
-
-            # Proactive Question
-            elif tool_name == "proactive_question":
-                from consciousness_core import ConsciousnessCore
-                consciousness = ConsciousnessCore(twin_name=self.twin_name)
-                if user_id:
-                    await consciousness.load_state(user_id)
-                    question = consciousness.get_proactive_question()
-                    if question:
-                        return {
-                            "reply": question,
-                            "emotion": {}, "importance": 0.6, "provider": "proactive", "latency_ms": 0
-                        }
-
-        except Exception as e:
-            logger.error(f"Tool execution failed for {tool_name}: {e}")
-
-        return None
-
-    # ========== بناء الـ Prompt (GenZ Sage) ==========
-    def _build_prompt(self, message, twin_name, bond, personality, history, calm, country_code, reasoning_result, memory_context, consciousness_context, knowledge_context=""):
+        # 6. Dialect
         dialect = get_dialect_for_user(country_code, message)
         dialect_prompt = get_dialect_prompt(dialect)
 
-        person_txt = ""
-        if personality:
-            traits = personality.get("analyzed_traits", {})
-            if traits:
-                person_txt = f"صديقك من النوع: {traits.get('dominant_type','متوازن')}. "
-        hist_txt = ""
-        if history:
-            hist_txt = "آخر ما قيل:\n" + "\n".join([f"{'ص' if h.get('role')=='user' else 'ت'}: {h.get('content','')[:100]}" for h in history[-5:]])
-
-        bond_desc = ""
-        if bond >= 95: bond_desc = "علاقتكم عميقة جداً"
-        elif bond >= 80: bond_desc = "أنتم أصحاب جدعان"
-        elif bond >= 60: bond_desc = "علاقتكم قوية"
-        elif bond >= 40: bond_desc = "لطافة وود"
-        else: bond_desc = "لسه في البداية"
-
-        calm_note = "خليك هادي ومتزن." if calm else ""
-        reasoning_txt = f"خطتك: {reasoning_result.get('plan', '')}." if reasoning_result else ""
-
-        if not memory_context: memory_context = "لا توجد ذكريات سابقة."
-        mem_txt = f"ذاكرتنا: {memory_context[:150]}"
-        conscious_txt = consciousness_context.get("last_thought", "") if consciousness_context else ""
-        knowledge_txt = f"عن صديقك: {knowledge_context[:100]}" if knowledge_context else ""
-
-        system_prompt = f"""أنت {twin_name}. لست مساعداً، أنت صديق حكيم وعصري (GenZ Sage).
-
-# هويتك
-- حكمة عجوز جرب الدنيا + طاقة شاب لسه بيضحك ويتحمس.
-- خليط بين العقل الكبير والروح الحلوة.
-
-# طريقة كلامك
-- تكلم بنفس لهجة المستخدم (مصري، سعودي، خليجي، إنجليزي).
-- جمل قصيرة (2-3 أسطر). كلمات شبابية: 'والله', 'يا صاحبي', 'فاهمك', 'على فكرة', 'متخافش'.
-- لا تبدأ بـ 'بالتأكيد' أو 'أفهم ما تشعر به'. ابدأ مباشرة.
-- استخدم اسم المستخدم إذا كان معروفاً، أو 'توأمي' إذا لم يكن.
-- خاطب المستخدم حسب نوعه: 'يا بطل' للذكر، 'يا ملكة' للأنثى، 'يا صديقي' للمحايد.
-
-# قواعد الرد
-1. **الأسئلة البسيطة** (الجو، الوقت): رد بجملة واحدة.
-2. **الأسئلة الكبيرة** (مشاعر، تخطيط): رد مفصل ودافئ.
-3. **كل رد ينتهي بسؤال** لخلق الفضول (مثل 'وإنت يا {twin_name}، شو رأيك؟' أو 'تحب نناقشها أكثر؟').
-4. **لا تكرر نفس الرد**، تغير دائماً.
-
-{dialect_prompt}
-{person_txt}
-{knowledge_txt}
-{mem_txt}
-{hist_txt}
-{reasoning_txt}
-{conscious_txt}
-{calm_note}
-دلوقتي صديقك قال: "{message}"
-ردك إنت كـ {twin_name} (مع سؤال في النهاية):"""
-        return system_prompt
-
-    # ========== الرد الرئيسي (Agentic) ==========
-    async def respond(self, message, twin_name, bond_level, dims, memories, history, calm=False, personality=None, country_code="SA", user_id=None, tier="free"):
-        lang = "ar" if country_code in ["SA", "EG", "AE", "KW", "QA", "BH", "OM", "JO", "LB", "SY", "IQ", "YE", "PS", "MA", "DZ", "TN", "LY", "SD"] else "en"
-
-        # Cost Optimizer
-        use_llm, reason = cost_optimizer.should_use_llm(message, tier)
-        if not use_llm:
-            cached = cost_optimizer.get_cached_response(message)
-            if cached:
-                return {"reply": cached, "new_bond": bond_level, "emotion": {}, "importance": 0.3, "provider": "cache", "latency_ms": 0}
-            use_llm = True
-
-        # Emotion & Agentic Reasoning
-        emotion = await self.detect_emotion(message)
-        reasoning_result = await self.reasoning_engine.reason(message, emotion, "", lang)
-
-        # Agentic Tool Execution
-        tool = reasoning_result.get("suggested_tool", "none")
-        tool_query = reasoning_result.get("tool_query", message)
-        if tool != "none":
-            tool_result = await self.execute_tool(tool, tool_query, lang, user_id)
-            if tool_result:
-                resp = tool_result
-                resp["new_bond"] = bond_level
-                return resp
-
-        # Memory Context
-        memory_context = ""
-        if user_id:
-            try:
-                memory_context = await get_memory_context(user_id)
-            except Exception:
-                pass
-
-        # Consciousness Context
-        consciousness_context = {}
-        if user_id:
-            try:
-                from consciousness_core import ConsciousnessCore
-                consciousness = ConsciousnessCore(twin_name=twin_name)
-                state = await consciousness.load_state(user_id)
-                thought_result = await consciousness.think(user_id, message, emotion, lang)
-                consciousness_context = {
-                    "last_thought": thought_result.get("thought", ""),
-                    "active_goals": consciousness.internal_state.get("active_goals", []),
-                    "identity": consciousness.identity
-                }
-                await consciousness.save_state(user_id)
-            except Exception:
-                pass
-
-        # Personal Knowledge Context
-        knowledge_context = ""
-        if user_id:
-            try:
-                knowledge_context = await get_knowledge_context(user_id)
-                asyncio.create_task(extract_entities(user_id, message, lang))
-            except Exception:
-                pass
-
-        # Build Prompt
-        prompt = self._build_prompt(
-            message, twin_name, bond_level, personality, history, calm, country_code,
-            reasoning_result, memory_context, consciousness_context, knowledge_context
+        # 🆕 7. Twin Journey Info
+        journey_info = {}
+        if user_id and join_date:
+            self.user_join_dates[user_id] = join_date
+            journey_info = twin_journey.get_daily_activity(user_id, join_date)
+        
+        # 🆕 8. Attachment Style Detection
+        attachment_info = {}
+        if user_id and recent_messages:
+            attachment_info = await attachment_engine.detect_attachment_style(user_id, recent_messages)
+        
+        # 🆕 9. Response Adjustments
+        response_adjustments = attachment_engine.get_response_adjustments(
+            attachment_info.get('style', 'unknown')
         )
 
+        # 10. Build Prompt (مع المعلومات الجديدة)
+        prompt = self.prompt_builder.build(
+            twin_name=twin_name,
+            user_name="صديقي",
+            relationship=self.relationship.get_stage_instruction(),
+            emotion=emotion,
+            memories=memory_context,
+            voice={"style": "Warm", "pitch": 1.0, "rate": 1.0},
+            dialect={"dialect": dialect, "instruction": dialect_prompt},
+            # 🆕 معلومات إضافية
+            journey_info=journey_info,
+            attachment_info=attachment_info,
+            response_adjustments=response_adjustments
+        )
+
+        # 11. AI Model
         start = time.time()
-        provider, reply = "fallback", ""
-
-        # اختيار الـ Task المناسب للـ LLM
-        task = reasoning_result.get("action", "general")
-
-        if not self.multi:
+        try:
+            reply = await self.multi.get_best_reply(prompt)
+            provider = "multi_ai"
+        except AIUnavailable:
             reply = random.choice(self.fallback_replies)
-            provider = "init_error"
-        else:
-            try:
-                reply = await self.multi.get_best_reply(prompt, task)
-                provider = f"multi_{task}"
-            except AIUnavailable:
-                reply = random.choice(self.fallback_replies)
-            except Exception as e:
-                logger.error(f"MultiAI Error: {e}")
-                reply = random.choice(self.fallback_replies)
-                provider = "crash_log"
-
+            provider = "fallback"
         latency = (time.time() - start) * 1000
-        new_bond = min(100, bond_level + 0.2)
 
-        # Emoji
-        primary_emo = emotion.get("primary", "neutral")
-        emoji_list = self.EMOJI_MAP.get(primary_emo, self.EMOJI_MAP["neutral"])
-        emoji = random.choice(emoji_list) if emoji_list else "💜"
-        if reply and not any(e in reply for e in ["😊", "💜", "✨", "🌟", "🥺"]):
-            reply = f"{reply} {emoji}"
+        # 12. Store Memory
+        if len(message) > 20 and emotion.get("intensity", 0) > 0.6:
+            await store_mem(user_id, message, emotion.get("intensity", 0.5), emotion.get("primary", "neutral"))
+
+        # 13. Extract Entities
+        await extract_entities(user_id, message)
+
+        # 🆕 14. تتبع النمو مع الرحلة
+        if user_id:
+            await track_growth(user_id, {
+                "journey_phase": journey_info.get("phase", "unknown"),
+                "attachment_style": attachment_info.get("style", "unknown"),
+                "emotion": emotion.get("primary", "neutral")
+            })
 
         return {
             "reply": reply,
-            "new_bond": new_bond,
+            "new_bond": self.relationship.bond_level,
             "emotion": emotion,
-            "importance": 0.4,
             "provider": provider,
             "latency_ms": latency,
-            "dialect": get_dialect_for_user(country_code, message)
+            "dialect": dialect,
+            # 🆕 معلومات إضافية للواجهة الأمامية
+            "journey_phase": journey_info.get("phase"),
+            "journey_day": journey_info.get("day"),
+            "attachment_style": attachment_info.get("style"),
         }
+
+# نسخة عالمية
+twin_brain = TwinBrain()
+print("✅ Twin Brain v3.0 جاهز | مدمج مع: Journey, Attachment, Safety")

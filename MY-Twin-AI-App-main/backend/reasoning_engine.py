@@ -1,76 +1,132 @@
 """
-MyTwin – Reasoning Engine v4.0 (Full Agentic)
-- Thought → Plan → Action → Tool → Reflection
-- يقترح الأداة المناسبة (youtube, google_search, dream_engine, coaching, weather, none)
-- يتأمل في نتيجة الإجراء ويعدل الخطة
-- يدعم العربية والإنجليزية
-- يستخدم Groq (مجاني وسريع)
+MyTwin – Reasoning Engine v6.0 (Agent Framework with Tool Registry)
+- يحلل الرسالة ويحدد المهمة (Task) والأدوات المطلوبة.
+- يخطط لخطوات متعددة (Multi-step Planning).
+- ينفذ الأدوات (Tool Executor) من خلال Tool Registry.
+- يتأمل في النتائج (Reflection).
+- يدعم العربية والإنجليزية.
 """
 import os, logging, json, asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List, Callable
 from groq_helper import call_groq
 
-logger = logging.getLogger("reasoning_engine")
+logger = logging.getLogger(__name__)
 
-# ========== الأدوات المتاحة ==========
-AVAILABLE_TOOLS = [
-    "none",                # لا أداة – رد عادي
-    "youtube",             # البحث في YouTube
-    "google_search",       # البحث في الإنترنت
-    "dream_engine",        # تحليل الأحلام
-    "coaching_session",    # جلسة تدريب
-    "weather",             # حالة الطقس
-    "memory_retrieval",    # استرجاع ذكريات محددة
-    "proactive_question",  # سؤال استباقي
-]
+class ToolRegistry:
+    """سجل الأدوات الديناميكي."""
+    _tools: Dict[str, Callable] = {}
+
+    @classmethod
+    def register(cls, name: str, func: Callable):
+        cls._tools[name] = func
+
+    @classmethod
+    def get_tool(cls, name: str) -> Optional[Callable]:
+        return cls._tools.get(name)
+
+    @classmethod
+    def list_tools(cls) -> List[str]:
+        return list(cls._tools.keys())
 
 class ReasoningEngine:
     def __init__(self, gemini_key: Optional[str] = None):
-        pass
+        self.gemini_key = gemini_key or os.getenv("GEMINI_API_KEY")
+        self.max_steps = 3  # الحد الأقصى لعدد الخطوات في الخطة
 
-    async def reason(
-        self,
-        message: str,
-        emotion: Dict[str, Any],
-        context: str = "",
-        lang: str = "ar"
-    ) -> Dict[str, Any]:
+    async def plan(self, message: str, emotion: Dict[str, Any], context: str = "", lang: str = "ar") -> Dict[str, Any]:
         """
-        Agentic Reasoning:
-        1. يفهم الموقف
-        2. يبني خطة
-        3. يختار الأداة المناسبة
-        4. يحدد أسلوب الرد
+        التخطيط: تحليل الرسالة وبناء خطة متعددة الخطوات.
         """
+        available_tools = ", ".join(ToolRegistry.list_tools())
         if lang == "ar":
-            prompt = f"""أنت وكيل ذكي (Agent) يعمل كرفيق عاطفي. حلل الموقف وأعد ONLY JSON:
+            prompt = f"""أنت وكيل ذكي. حلل الرسالة وابني خطة عمل متعددة الخطوات. أعد ONLY JSON:
 {{
-  "thought": "تحليل عميق بالعامية",
-  "plan": "خطة الرد بالعامية",
-  "action": "one of: support, advice, listen, celebrate, motivate, inform, search, music, dream, coaching",
-  "response_style": "one of: warm, direct, gentle, enthusiastic, calm",
-  "suggested_tool": "one of: {', '.join(AVAILABLE_TOOLS)}",
-  "tool_query": "الاستعلام للأداة إن وجدت، وإلا ''",
-  "priority": "one of: high, medium, low"
+  "analysis": "تحليل سريع للموقف",
+  "steps": [
+    {{"action": "search", "tool": "google_search", "query": "..."}},
+    {{"action": "process", "tool": "none", "reasoning": "..."}}
+  ],
+  "final_action": "general"
 }}
 السياق: {context}
 الرسالة: "{message}"
 المشاعر: {emotion.get('primary', 'neutral')}
-الشدة: {emotion.get('intensity', 0.5)}
-الاحتياج: {emotion.get('needs', 'general')}
+الأدوات المتاحة: {available_tools}
 JSON:"""
         else:
-            prompt = f"""You are an intelligent agent acting as an emotional companion. Analyze and return ONLY JSON:
-{{
-  "thought": "...",
-  "plan": "...",
-  "action": "...",
-  "response_style": "...",
-  "suggested_tool": "...",
-  "tool_query": "...",
-  "priority": "..."
-}}
+            prompt = f"""You are an intelligent agent. Analyze and build a multi-step plan. Return ONLY JSON:
+{{"analysis": "...", "steps": [...], "final_action": "..."}}
+Context: {context}
 Message: "{message}"
+Available tools: {available_tools}
+JSON:"""
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, call_groq, prompt)
+            if result:
+                raw = result.strip()
+                if raw.startswith("```json"): raw = raw.split("```json")[1].split("```")[0].strip()
+                elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
+                plan = json.loads(raw)
+                if len(plan.get("steps", [])) > self.max_steps:
+                    plan["steps"] = plan["steps"][:self.max_steps]
+                return plan
+        except Exception as e:
+            logger.warning(f"Planning failed: {e}")
+        return {"analysis": "Failed to plan", "steps": [], "final_action": "general"}
+
+    async def execute_step(self, step: Dict[str, Any], user_id: Optional[str] = None) -> Optional[str]:
+        """
+        تنفيذ خطوة واحدة: البحث، تنفيذ أداة، أو معالجة.
+        """
+        action = step.get("action", "none")
+        tool = step.get("tool", "none")
+        query = step.get("query", "")
+
+        if action == "search":
+            if tool == "google_search":
+                from external_services import search_google
+                return await search_google(query)
+            elif tool == "youtube":
+                from external_services import search_youtube
+                return await search_youtube(query)
+            else:
+                return "بحث عام غير متاح."
+        
+        elif action == "process":
+            return None  # سيتم توليد الرد في النهاية
+        
+        elif action == "tool":
+            # تنفيذ أداة مسجلة في Tool Registry
+            tool_func = ToolRegistry.get_tool(tool)
+            if tool_func:
+                return await tool_func(user_id, query)
+            else:
+                return None
+        
+        return None
+
+    async def reflect(self, plan: Dict[str, Any], result: str, lang: str = "ar") -> Dict[str, Any]:
+        """
+        التأمل: تحليل نتيجة الخطة لتعديل السلوك المستقبلي.
+        """
+        if lang == "ar":
+            prompt = f"""تأمل في نتيجة الخطة وأعد ONLY JSON:
+{{
+  "was_effective": true/false,
+  "what_worked": "ما نجح",
+  "what_didnt": "ما لم ينجح",
+  "adjustment": "كيف ستعدل خططك المستقبلية"
+}}
+الخطة: {json.dumps(plan)}
+النتيجة: "{result}"
+JSON:"""
+        else:
+            prompt = f"""Reflect on the plan's result and return ONLY JSON:
+{{"was_effective": true/false, "what_worked": "...", "what_didnt": "...", "adjustment": "..."}}
+Plan: {json.dumps(plan)}
+Result: "{result}"
 JSON:"""
 
         try:
@@ -82,65 +138,5 @@ JSON:"""
                 elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
                 return json.loads(raw)
         except Exception as e:
-            logger.warning(f"Agent reasoning failed: {e}")
-
-        return self._fallback_reason(emotion)
-
-    async def reflect(
-        self,
-        original_message: str,
-        action_taken: str,
-        result: str,
-        lang: str = "ar"
-    ) -> Dict[str, Any]:
-        """
-        تأمل الوكيل في نتيجة الإجراء لتعديل سلوكه المستقبلي.
-        """
-        if lang == "ar":
-            prompt = f"""تأمل في نتيجة الإجراء الذي اتخذته وأعد ONLY JSON:
-{{
-  "was_effective": true/false,
-  "what_worked": "ما نجح",
-  "what_didnt": "ما لم ينجح",
-  "adjustment": "كيف ستعدل سلوكك المرة القادمة"
-}}
-الرسالة الأصلية: "{original_message}"
-الإجراء المتخذ: {action_taken}
-النتيجة: {result}
-JSON:"""
-        else:
-            prompt = f"""Reflect on the action result and return ONLY JSON:
-{{"was_effective": true/false, "what_worked": "...", "what_didnt": "...", "adjustment": "..."}}
-Original: "{original_message}"
-Action: {action_taken}
-Result: {result}
-JSON:"""
-
-        try:
-            loop = asyncio.get_running_loop()
-            resp = await loop.run_in_executor(None, call_groq, prompt)
-            if resp:
-                raw = resp.strip()
-                if raw.startswith("```json"): raw = raw.split("```json")[1].split("```")[0].strip()
-                elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
-                return json.loads(raw)
-        except Exception as e:
             logger.warning(f"Reflection failed: {e}")
-
         return {"was_effective": True, "what_worked": "", "what_didnt": "", "adjustment": ""}
-
-    def _fallback_reason(self, emotion: Dict[str, Any]) -> Dict[str, Any]:
-        primary = emotion.get("primary", "neutral")
-        plans = {
-            "joy": {"thought": "المستخدم سعيد، يجب مشاركته فرحته", "plan": "شاركه الفرحة واسأله عن التفاصيل", "action": "celebrate", "response_style": "enthusiastic", "suggested_tool": "none", "tool_query": "", "priority": "high"},
-            "sadness": {"thought": "المستخدم حزين، يحتاج للدعم", "plan": "استمع له بتعاطف ثم قدم الدعم", "action": "support", "response_style": "gentle", "suggested_tool": "none", "tool_query": "", "priority": "high"},
-            "fear": {"thought": "المستخدم خائف، يحتاج للطمأنينة", "plan": "طمئنه وقدم له الدعم", "action": "support", "response_style": "calm", "suggested_tool": "none", "tool_query": "", "priority": "high"},
-            "anger": {"thought": "المستخدم غاضب، يحتاج للتنفيس", "plan": "دعه يفرغ غضبه ثم تحدث معه بهدوء", "action": "listen", "response_style": "calm", "suggested_tool": "none", "tool_query": "", "priority": "high"},
-            "love": {"thought": "المستخدم يعبر عن حب، يجب الرد بحرارة", "plan": "بادله المشاعر الدافئة", "action": "celebrate", "response_style": "warm", "suggested_tool": "none", "tool_query": "", "priority": "high"},
-            "surprise": {"thought": "المستخدم متفاجئ، يجب مشاركته", "plan": "شاركه المفاجأة واسأله عن التفاصيل", "action": "celebrate", "response_style": "enthusiastic", "suggested_tool": "none", "tool_query": "", "priority": "medium"},
-        }
-        return plans.get(primary, {"thought": "موقف عادي", "plan": "رد بشكل طبيعي", "action": "inform", "response_style": "warm", "suggested_tool": "none", "tool_query": "", "priority": "medium"})
-
-    @staticmethod
-    def explain(provider: str, task: str, memories: list, personality: Optional[Dict] = None) -> str:
-        return f"Reasoning: provider={provider}, task={task}, memories={len(memories)}"

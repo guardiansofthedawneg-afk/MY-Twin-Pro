@@ -1,4 +1,7 @@
-"""MyTwin API v9.0 — Complete & Final"""
+"""
+MyTwin API v10.0 — متكامل وذكي
+يدمج جميع المحركات الجديدة: الأمان، الرحلة، التعلق، حدود موحدة
+"""
 import os, asyncio, logging, json
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional, Dict, List, Any
@@ -9,12 +12,22 @@ from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from slowapi.errors import RateLimitExceeded
 from supabase import create_client, Client
+
+# المحركات الأساسية
 from twin_brain import TwinBrain
 from rate_limiter import limiter, rate_limit_exceeded_handler
-from token_limits import check_tok, BASE_TOK
 from cache import get as cache_get, set as cache_set
-from time import time
 from multi_ai import AIUnavailable
+from consciousness_core import ConsciousnessCore
+
+# المحركات الموحدة الجديدة
+from message_limits import (
+    check_message_limit, check_tok, check_feature_usage,
+    get_usage_summary, get_tier_features, activate_referral_bonus,
+    add_referral_tok_bonus
+)
+
+# الخدمات الخارجية
 from external_services import (
     search_youtube, search_spotify, get_weather,
     get_todoist_tasks, get_calendar_events,
@@ -25,7 +38,6 @@ from referral import generate_referral_code, activate_referral
 from proactive_engine import proactive_engine
 from dream_engine import analyze_dream
 from growth_tracker import get_growth_history
-from latency_tracker import tracker
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -41,7 +53,6 @@ if not all([SUPABASE_URL, SUPABASE_KEY, GEMINI_KEY]):
 
 db: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 brain = TwinBrain(GEMINI_KEY)
-from consciousness_core import ConsciousnessCore
 consciousness = ConsciousnessCore(twin_name="MyTwin", gemini_key=GEMINI_KEY)
 
 ALLOWED_ORIGINS = [
@@ -51,7 +62,8 @@ ALLOWED_ORIGINS = [
     "http://127.0.0.1:19006",
     "exp://192.168.1.1:19000"
 ]
-app = FastAPI(title="MyTwin API", version="9.0.0")
+
+app = FastAPI(title="MyTwin API", version="10.0.0")
 app.include_router(telegram_router)
 
 @app.on_event("startup")
@@ -62,6 +74,7 @@ app.add_middleware(CORSMiddleware, allow_origins=ALLOWED_ORIGINS, allow_methods=
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
+# ========== المصادقة ==========
 def get_user(auth: str = Header(default=None, alias="Authorization")) -> Optional[str]:
     if not auth or not auth.startswith("Bearer "):
         raise HTTPException(401, "unauthorized")
@@ -87,6 +100,7 @@ def get_profile(uid: str) -> dict:
         logger.error(f"Profile fetch failed: {e}")
         return {}
 
+# ========== نماذج البيانات ==========
 class ChatReq(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
     twin_name: str = Field("توأمك")
@@ -97,7 +111,7 @@ class ChatReq(BaseModel):
 class ReferralCodeReq(BaseModel):
     code: str = Field(..., min_length=2, max_length=20)
 
-# ========== Chat ==========
+# ========== نقطة النهاية الرئيسية: المحادثة ==========
 @app.post("/api/chat")
 @limiter.limit("30/minute")
 async def chat(
@@ -113,9 +127,41 @@ async def chat(
     twin_gender = x_twin_gender or "female"
     p = get_profile(uid)
     tier = p.get("tier", "free")
+    signup_date = p.get("created_at")  # مهم لرحلة التوأم وأسبوع العسل
 
+    # 1. فحص الأمان أولاً
+    from safety_engine import safety_engine
+    safety_check = safety_engine.check_safety(body.message)
+    if not safety_check["safe"] and safety_check["severity"] == "critical":
+        return {
+            "reply": safety_engine.HELPLINE_MESSAGE,
+            "safety_alert": True,
+            "provider": "safety_engine"
+        }
+
+    # 2. فحص حدود الرسائل
+    allowed, remaining, reason = check_message_limit(uid, tier, signup_date)
+    if not allowed:
+        from proactive_engine import proactive_engine
+        await proactive_engine.trigger_daily_limit_notification(uid, tier, p.get("lang", "ar"))
+        return JSONResponse(
+            status_code=429,
+            content={
+                "reply": "استنفدت طاقتي اليومية 💜 سأعود غداً بطاقة جديدة!",
+                "limit_reached": True,
+                "remaining": 0,
+                "provider": "limit_handler"
+            }
+        )
+
+    # 3. المعالجة الرئيسية
     res = {}
     try:
+        # تجهيز قائمة آخر الرسائل لتحليل التعلق
+        recent_msgs = [h.get("content", "") for h in body.history[-20:] if isinstance(h, dict)]
+        recent_msgs.append(body.message)
+
+        # استدعاء الدماغ مع معلومات الرحلة والتعلق
         res = await brain.respond(
             message=body.message,
             twin_name=body.twin_name,
@@ -127,7 +173,9 @@ async def chat(
             personality=None,
             country_code=country_code,
             user_id=uid,
-            tier=tier
+            tier=tier,
+            join_date=signup_date,           # لرحلة التوأم
+            recent_messages=recent_msgs      # لتحليل التعلق
         )
         if not isinstance(res, dict):
             logger.error(f"Brain returned non-dict: {type(res)}")
@@ -138,22 +186,27 @@ async def chat(
         logger.error(f"Critical Brain Error: {e}")
         res = {"reply": "أواجه ضغطاً تقنياً، سأعود قريباً 💜", "provider": "exception_handler"}
 
+    # 4. تحديث عداد الرسائل (بعد النجاح)
     try:
         loop = asyncio.get_running_loop()
         loop.run_in_executor(None, lambda: db.rpc("increment_daily_usage", {"p_user_id": uid, "p_field": "messages"}).execute())
     except:
         pass
 
+    # 5. الرد النهائي مع معلومات إضافية
     return {
         "reply": res.get("reply", "..."),
         "new_bond": res.get("new_bond", 0),
         "emotion": res.get("emotion", {}),
         "tokens_left": 999,
         "provider": res.get("provider", "unknown"),
-        "latency_ms": res.get("latency_ms", 0)
+        "latency_ms": res.get("latency_ms", 0),
+        "journey_phase": res.get("journey_phase"),
+        "journey_day": res.get("journey_day"),
+        "attachment_style": res.get("attachment_style")
     }
 
-# ========== Referral ==========
+# ========== الإحالة ==========
 @app.post("/api/referral/generate")
 async def generate_referral(uid: str = Depends(get_user)):
     code = generate_referral_code(uid)
@@ -169,13 +222,13 @@ async def activate_referral_endpoint(body: ReferralCodeReq, uid: str = Depends(g
     if result.get("success"):
         inviter_id = result.get("inviter_id")
         if inviter_id:
-            from token_limits import add_referral_bonus
-            add_referral_bonus(inviter_id, 500)
-            add_referral_bonus(uid, 500)
+            add_referral_tok_bonus(inviter_id)
+            add_referral_tok_bonus(uid)
+            activate_referral_bonus(uid)  # رسائل إضافية
         return {"success": True, "bonus": 500}
     raise HTTPException(400, result.get("error", "invalid_code"))
 
-# ========== Cron Proactive ==========
+# ========== وظائف دورية ==========
 @app.post("/cron/proactive")
 async def cron_proactive(req: Request):
     key = req.headers.get("X-Cron-Key", "")
@@ -184,7 +237,7 @@ async def cron_proactive(req: Request):
     result = await proactive_engine.run_cron_job()
     return result
 
-# ========== Dream & Growth ==========
+# ========== الأحلام والنمو ==========
 @app.post("/api/dream/analyze")
 async def analyze_dream_endpoint(body: dict, uid: str = Depends(get_user)):
     result = await analyze_dream(uid, body.get("dream", ""), body.get("lang", "ar"))
@@ -194,26 +247,39 @@ async def analyze_dream_endpoint(body: dict, uid: str = Depends(get_user)):
 async def growth_history(uid: str = Depends(get_user)):
     return await get_growth_history(uid)
 
-# ========== Services ==========
+# ========== الخدمات الخارجية ==========
 @app.get("/api/services/youtube")
-async def youtube_endpoint(query: str, lang: str = "ar"):
+async def youtube_endpoint(query: str, lang: str = "ar", uid: str = Depends(get_user)):
+    # فحص الحد اليومي للميزة
+    p = get_profile(uid)
+    allowed, remaining = check_feature_usage(uid, p.get("tier", "free"), "youtube")
+    if not allowed:
+        return JSONResponse(status_code=429, content={"error": "daily_limit_reached", "remaining": 0})
     result = await search_youtube(query, lang=lang)
-    return {"result": result} if result else {"error": "unavailable"}
+    return {"result": result, "remaining": remaining} if result else {"error": "unavailable"}
 
 @app.get("/api/services/spotify")
-async def spotify_endpoint(query: str):
+async def spotify_endpoint(query: str, uid: str = Depends(get_user)):
+    p = get_profile(uid)
+    allowed, remaining = check_feature_usage(uid, p.get("tier", "free"), "spotify")
+    if not allowed:
+        return JSONResponse(status_code=429, content={"error": "daily_limit_reached"})
     result = await search_spotify(query)
-    return {"result": result} if result else {"error": "unavailable"}
+    return {"result": result, "remaining": remaining} if result else {"error": "unavailable"}
 
 @app.get("/api/services/weather")
-async def weather_endpoint(city: str = "Cairo"):
+async def weather_endpoint(city: str = "Cairo", uid: str = Depends(get_user)):
+    p = get_profile(uid)
+    allowed, remaining = check_feature_usage(uid, p.get("tier", "free"), "weather")
+    if not allowed:
+        return JSONResponse(status_code=429, content={"error": "daily_limit_reached"})
     result = await get_weather(city)
-    return {"result": result} if result else {"error": "unavailable"}
+    return {"result": result, "remaining": remaining} if result else {"error": "unavailable"}
 
-# ========== Misc ==========
+# ========== معلومات عامة ==========
 @app.get("/")
 async def root():
-    return {"status": "ok", "version": "9.0.0"}
+    return {"status": "ok", "version": "10.0.0"}
 
 @app.delete("/api/account")
 async def del_acc(uid: str = Depends(get_user)):
@@ -224,28 +290,33 @@ async def del_acc(uid: str = Depends(get_user)):
 async def get_consciousness(uid: str = Depends(get_user)):
     return consciousness.get_consciousness_state()
 
-# ========== AI Stats ==========
+# ========== الإحصائيات والحدود ==========
 @app.get("/api/stats")
 async def get_ai_stats(uid: str = Depends(get_user)):
     try:
-        today = date.today().isoformat()
-        usage_res = db.table("daily_usage").select("messages").eq("user_id", uid).eq("date", today).single().execute()
-        daily_usage = usage_res.data.get("messages", 0) if usage_res.data else 0
-        
-        mem_res = db.table("memories").select("id", count="exact").eq("user_id", uid).execute()
-        total_memories = mem_res.count or 0
-        
+        p = get_profile(uid)
+        summary = get_usage_summary(uid, p.get("tier", "free"), p.get("created_at"))
         return {
-            "daily_requests": daily_usage,
-            "total_memories": total_memories,
+            "daily_requests": summary["messages"]["used"],
+            "total_memories": 0,  # يمكن ربطه لاحقاً
             "active_models": 8,
-            "avg_latency": "450ms"
+            "avg_latency": "450ms",
+            "limits": summary
         }
     except Exception as e:
         logger.error(f"Stats error: {e}")
         return {"error": "unavailable"}
 
-# ========== Proactive Check ==========
+@app.get("/api/limits/check")
+async def check_limits(uid: str = Depends(get_user), feature: str = ""):
+    p = get_profile(uid)
+    tier = p.get("tier", "free")
+    if feature:
+        allowed, remaining = check_feature_usage(uid, tier, feature)
+        return {"feature": feature, "allowed": allowed, "remaining": remaining}
+    summary = get_usage_summary(uid, tier, p.get("created_at"))
+    return summary
+
 @app.get("/api/proactive/check")
 async def proactive_check(uid: str = Depends(get_user)):
     try:
@@ -254,17 +325,3 @@ async def proactive_check(uid: str = Depends(get_user)):
     except Exception as e:
         logger.error(f"Proactive check error: {e}")
         return {"error": "unavailable"}
-
-# ========== Limits Tracking ==========
-@app.get("/api/limits/check")
-async def check_limits(uid: str = Depends(get_user), feature: str = ""):
-    try:
-        today = date.today().isoformat()
-        usage_res = db.table("daily_usage").select("messages").eq("user_id", uid).eq("date", today).single().execute()
-        used = usage_res.data.get("messages", 0) if usage_res.data else 0
-        limit = 10 if feature == "youtube" else 0
-        remaining = max(0, limit - used)
-        return {"feature": feature, "remaining": remaining, "used": used, "limit": limit}
-    except Exception as e:
-        logger.error(f"Limits check error: {e}")
-        return {"feature": feature, "remaining": 0}

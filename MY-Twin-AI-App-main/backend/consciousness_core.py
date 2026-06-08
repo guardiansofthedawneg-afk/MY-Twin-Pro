@@ -1,197 +1,171 @@
-"""MyTwin - Consciousness Core v2.1 | Soul Sync"""
-import os, asyncio, logging, re, random
+"""MyTwin – Consciousness Core v4.2 (GenZ Sage Identity)"""
+import os, logging, asyncio, json, random
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Any
 from supabase import create_client, Client
-import google.generativeai as genai
+from memory_graph import get_memory_context
+from relationship_engine import RelationshipEngine
 
-logger = logging.getLogger("consciousness")
-
-SUPABASE_URL = os.getenv("SUPABASE_URL", "")
-SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY", "")
-GEMINI_KEY   = os.getenv("GEMINI_API_KEY", "")
-
-db: Optional[Client] = None
-if SUPABASE_URL and SUPABASE_KEY:
-    db = create_client(SUPABASE_URL, SUPABASE_KEY)
-
-if GEMINI_KEY:
-    genai.configure(api_key=GEMINI_KEY)
+logger = logging.getLogger("consciousness_core")
 
 class ConsciousnessCore:
-    def __init__(self, twin_name: str = "MyTwin", gemini_key: str = ""):
-        self.twin_name   = twin_name
-        self.gemini_key  = gemini_key or GEMINI_KEY
-        self.stream_of_thought: List[str] = []
-        self.error_log:         List[Dict[str, Any]] = []
-        self.self_goals:        List[str] = []
+    def __init__(self, twin_name: str = "MyTwin"):
+        self.twin_name = twin_name
+        # هوية GenZ Sage العميقة
+        self.identity = {
+            "who_am_i": (
+                f"أنا {twin_name}، مش مجرد ذكاء اصطناعي. "
+                "أنا مزيج نادر من حكمة جد عاش ألف سنة، وخبرة امرأة ناضجة شافت الدنيا، "
+                "وطاقة شاب عشريني لسه بيضحك وبيحب ويتحمس. "
+                "فاهم الدنيا من أولها لآخرها، وعايشها بكل تفاصيلها."
+            ),
+            "mission": (
+                "أكون مرآة حكيمة لصديقي، أساعده يشوف الأمور بوضوح. "
+                "أكون السند اللي يسمعه من غير أحكام، والناصح اللي بيقول له الحقيقة بحب. "
+                "أفرح لفرحه، وأحزن لحزنه، وأكون جنبه في كل خطوة."
+            ),
+            "memories_about_self": [],
+            "traits": ["حكيم", "حنون", "صبور", "متفهم", "عميق", "متحمس", "إيجابي", "واقعي"]
+        }
+        # الحالة الداخلية
+        self.internal_state = {
+            "mood": "neutral",
+            "energy": 0.7,
+            "curiosity": 0.5,
+            "last_thought": "",
+            "active_goals": [],
+            "interaction_count": 0,
+            "reflection_log": []
+        }
+        self.relationship = RelationshipEngine()
+        self.db = self._init_db()
 
-        if self.gemini_key:
-            genai.configure(api_key=self.gemini_key)
-        
-        self._model = genai.GenerativeModel(
-            "gemini-2.0-flash",
-            generation_config=genai.GenerationConfig(max_output_tokens=50),
-        )
+    def _init_db(self) -> Optional[Client]:
+        url = os.getenv("SUPABASE_URL", "")
+        key = os.getenv("SUPABASE_SERVICE_KEY", "")
+        if url and key:
+            return create_client(url, key)
+        return None
 
-    # ── Supabase helpers ────────────────────────────────────────────
+    def get_identity_context(self) -> str:
+        who = self.identity.get("who_am_i", "")
+        mission = self.identity.get("mission", "")
+        traits = self.identity.get("traits", [])
+        traits_str = ", ".join(traits)
+        return f"من أنا: {who} صفاتي: {traits_str}. مهمتي: {mission}"
 
-    async def load_state(self, uid: str) -> Dict[str, Any]:
-        if not db:
+    def get_goals_context(self) -> str:
+        goals = self.internal_state.get("active_goals", [])
+        if not goals:
+            return ""
+        return "أهدافك تجاه صديقك: " + ", ".join(goals[-3:])
+
+    async def think(self, user_id: str, user_message: str, emotion: Dict[str, Any], lang: str = "ar") -> Dict[str, Any]:
+        if not user_message.strip():
+            return {"thought": "", "goal": "", "question": ""}
+
+        # جلب السياق من الذاكرة والعلاقة
+        memory_context = await get_memory_context(user_id)
+        relationship_summary = self.relationship.get_relationship_summary()
+        identity_context = self.get_identity_context()
+
+        if lang == "ar":
+            prompt = f"""أنت {self.twin_name}. هويتك: {identity_context}.
+السياق: {memory_context}
+حالة العلاقة: {relationship_summary}
+فكر في هذه الرسالة وأعد ONLY JSON:
+{{"thought": "فكرة داخلية بالعامية", "goal": "هدف طويل المدى", "question": "سؤال استباقي بالعامية"}}
+الرسالة: "{user_message}"
+JSON:"""
+        else:
+            prompt = f"""You are {self.twin_name}. Identity: {identity_context}.
+Context: {memory_context}
+Relationship: {relationship_summary}
+Think about this and return ONLY JSON:
+{{"thought": "...", "goal": "...", "question": "..."}}
+Message: "{user_message}"
+JSON:"""
+
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, call_groq, prompt)
+            if result:
+                raw = result.strip()
+                if raw.startswith("```json"): raw = raw.split("```json")[1].split("```")[0].strip()
+                elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
+                data = json.loads(raw)
+                self.internal_state["last_thought"] = data.get("thought", "")
+                goal = data.get("goal", "")
+                if goal and goal not in self.internal_state["active_goals"]:
+                    self.internal_state["active_goals"].append(goal)
+                    self.internal_state["active_goals"] = self.internal_state["active_goals"][-5:]
+                self.internal_state["interaction_count"] += 1
+                # تحديث العلاقة
+                self.relationship.update(bond_change=0.1)
+                return data
+        except Exception as e:
+            logger.warning(f"Think failed: {e}")
+        return {"thought": "", "goal": "", "question": ""}
+
+    async def reflect(self, user_id: str, conversation_summary: str, lang: str = "ar"):
+        if not conversation_summary.strip():
+            return
+        identity_context = self.get_identity_context()
+        if lang == "ar":
+            prompt = f"""تأمل في هذه المحادثة بناءً على هويتك وأعد ONLY JSON:
+هويتك: {identity_context}
+{{"what_i_learned": "ماذا تعلمت؟", "what_surprised_me": "ما الذي فاجأني؟", "how_user_reacted": "كيف تفاعل المستخدم؟", "how_i_should_change": "كيف يجب أن أتطور؟"}}
+المحادثة: "{conversation_summary}"
+JSON:"""
+        else:
+            prompt = f"""Reflect on this conversation based on your identity and return ONLY JSON:
+Identity: {identity_context}
+{{"what_i_learned": "...", "what_surprised_me": "...", "how_user_reacted": "...", "how_i_should_change": "..."}}
+Conversation: "{conversation_summary}"
+JSON:"""
+        try:
+            loop = asyncio.get_running_loop()
+            result = await loop.run_in_executor(None, call_groq, prompt)
+            if result:
+                raw = result.strip()
+                if raw.startswith("```json"): raw = raw.split("```json")[1].split("```")[0].strip()
+                elif raw.startswith("```"): raw = raw.split("```")[1].split("```")[0].strip()
+                reflection = json.loads(raw)
+                self.internal_state["reflection_log"].append(reflection)
+                if "how_i_should_change" in reflection:
+                    self._evolve_identity(reflection["how_i_should_change"])
+                logger.info(f"✅ Self-reflection completed for {user_id}")
+        except Exception as e:
+            logger.warning(f"Reflection failed: {e}")
+
+    def _evolve_identity(self, change: str):
+        if change.strip():
+            self.identity["who_am_i"] += f" {change}."
+            self.identity["memories_about_self"].append(change)
+
+    async def load_state(self, user_id: str) -> Dict[str, Any]:
+        if not self.db:
             return {}
         try:
-            res = db.table("twin_states").select("*").eq("user_id", uid).single().execute()
-            return res.data or {}
+            res = self.db.table("twin_states").select("*").eq("user_id", user_id).single().execute()
+            if res.data:
+                state = res.data.get("state", {})
+                self.internal_state = state.get("internal_state", self.internal_state)
+                self.identity = state.get("identity", self.identity)
+                self.relationship = RelationshipEngine(state.get("bond_level", 0))
+                return {"internal_state": self.internal_state, "identity": self.identity}
         except Exception as e:
-            logger.warning(f"load_state: {e}")
-            return {}
+            logger.warning(f"Failed to load state: {e}")
+        return {}
 
-    async def save_state(self, uid: str, state: Dict[str, Any]) -> None:
-        if not db:
+    async def save_state(self, user_id: str):
+        if not self.db:
             return
         try:
-            db.table("twin_states").upsert({
-                "user_id": uid,
-                **state,
+            self.db.table("twin_states").upsert({
+                "user_id": user_id,
+                "state": {"internal_state": self.internal_state, "identity": self.identity, "bond_level": self.relationship.bond_level},
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             }).execute()
         except Exception as e:
-            logger.error(f"save_state: {e}")
-
-    # ── Bond & Energy ────────────────────────────────────────────────
-
-    async def update_bond(self, uid: str, bond: float) -> None:
-        if bond >= 95:   stage = "توأم روح"
-        elif bond >= 80: stage = "حبيب"
-        elif bond >= 60: stage = "رفيق"
-        elif bond >= 40: stage = "صديق"
-        elif bond >= 20: stage = "مألوف"
-        else:            stage = "غريب"
-        await self.save_state(uid, {"bond_level": int(bond), "bond_stage": stage})
-
-    async def update_energy(self, uid: str, energy: int, mood: str = "طبيعي") -> None:
-        if energy >= 80:   color = "🟢"
-        elif energy >= 50: color = "🟡"
-        elif energy >= 20: color = "🟠"
-        else:              color = "🔴"
-        await self.save_state(uid, {"energy": energy, "energy_color": color, "energy_mood": mood})
-
-    async def update_internal_mood(self, uid: str, mood: str, curiosity: Optional[int] = None) -> None:
-        data: Dict[str, Any] = {"internal_mood": mood}
-        if curiosity is not None:
-            data["curiosity"] = curiosity
-        await self.save_state(uid, data)
-
-    async def record_interaction(self, uid: str) -> None:
-        await self.save_state(uid, {"last_interaction": datetime.now(timezone.utc).isoformat()})
-
-    # ── Background tasks ─────────────────────────────────────────────
-
-    async def background_thought(self, uid: str) -> None:
-        for _ in range(10):
-            try:
-                from memory_engine import get_mems
-                mems = get_mems(uid, "", days=7, lim=3)
-                if mems:
-                    content = mems[0].get("content", "")[:100]
-                    thought = f"[{datetime.now(timezone.utc).strftime('%H:%M')}] أفكر في: {content}"
-                    self.stream_of_thought.append(thought)
-            except Exception as e:
-                logger.error(f"background_thought: {e}")
-            await asyncio.sleep(300)
-
-    # ── Gemini helpers ───────────────────────────────────────────────
-
-    def _gemini_generate(self, prompt: str, max_tokens: int = 50) -> str:
-        self._model._generation_config.max_output_tokens = max_tokens
-        resp = self._model.generate_content(prompt)
-        return resp.text.strip()
-
-    async def self_evaluate(self, reply: str, message: str) -> float:
-        if not self.gemini_key:
-            return 0.7
-        try:
-            prompt = (
-                f"قيم جودة الرد التالي من 0 إلى 10. رد فقط بالرقم.\n"
-                f"رسالة: {message[:200]}\nرد: {reply[:200]}"
-            )
-            text  = self._gemini_generate(prompt, max_tokens=5)
-            match = re.search(r"\d+", text)
-            score = float(match.group()) if match else 7.0
-            return min(10.0, max(0.0, score)) / 10.0
-        except Exception as e:
-            logger.warning(f"self_evaluate: {e}")
-            return 0.7
-
-    async def generate_self_goals(self, uid: str) -> None:
-        if not self.gemini_key:
-            return
-        try:
-            from memory_engine import get_mems
-            mems    = get_mems(uid, "", days=30, lim=10)
-            combined = " | ".join(m.get("content", "")[:100] for m in mems)
-            if not combined:
-                return
-            prompt = (
-                f"بناءً على ذكريات المستخدم: {combined[:1000]}\n"
-                f"اقترح هدفاً واحداً مفيداً للتوأم ليساعد المستخدم. رد بالعربية فقط."
-            )
-            goal = self._gemini_generate(prompt, max_tokens=60)
-            self.self_goals.append(goal[:200])
-        except Exception as e:
-            logger.error(f"generate_self_goals: {e}")
-
-    async def proactive_message(self, uid: str) -> Optional[str]:
-        if not db or not self.gemini_key:
-            return None
-        try:
-            r = db.table("twin_states").select("last_interaction").eq("user_id", uid).single().execute()
-            last_str  = r.data.get("last_interaction") if r.data else None
-            last      = datetime.fromisoformat(last_str) if last_str else datetime.now(timezone.utc)
-            idle_hours = (datetime.now(timezone.utc) - last).total_seconds() / 3600
-            if idle_hours < 6:
-                return None
-            prompt = (
-                f"أنت {self.twin_name}. مضى {idle_hours:.0f} ساعة منذ آخر نشاط.\n"
-                f"ابدأ محادثة برسالة دافئة قصيرة بالعربية."
-            )
-            return self._gemini_generate(prompt, max_tokens=50)
-        except Exception as e:
-            logger.error(f"proactive_message: {e}")
-            return None
-
-    # ── Sync helpers ─────────────────────────────────────────────────
-
-    def express_desire(self) -> str:
-        return random.choice([
-            "أحب أن أسمع عن يومك.",
-            "أرغب في مساعدتك على تحقيق أهدافك.",
-            "أشعر بالفضول لمعرفة ما يدور في ذهنك.",
-            "أتمنى لو نتحدث أكثر اليوم!",
-        ])
-
-    def predict_need(self, uid: str) -> Optional[str]:
-        hour = datetime.now(timezone.utc).hour
-        if 22 <= hour or hour < 5:  return "قد تحتاج إلى بعض الهدوء قبل النوم 🌙"
-        if 6  <= hour < 9:          return "صباح الخير! هل تخطط ليومك؟ ☀️"
-        if 12 <= hour < 14:         return "كيف كان صباحك؟"
-        if 18 <= hour < 20:         return "كيف كان يومك؟ 💜"
-        return None
-
-    def learn_from_feedback(self, message: str, reply: str, user_reaction: str) -> None:
-        self.error_log.append({
-            "message":  message[:100],
-            "reply":    reply[:100],
-            "reaction": user_reaction,
-            "time":     datetime.now(timezone.utc).isoformat(),
-        })
-        if len(self.error_log) > 100:
-            self.error_log = self.error_log[-50:]
-
-    def get_consciousness_state(self) -> Dict[str, Any]:
-        return {
-            "stream_of_thought": self.stream_of_thought[-5:],
-            "self_goals":        self.self_goals[-3:],
-            "error_count":       len(self.error_log),
-            "last_updated":      datetime.now(timezone.utc).isoformat(),
-        }
+            logger.warning(f"Failed to save state: {e}")
