@@ -75,7 +75,8 @@ async def _edge_tts(
     text: str,
     voice_code: str = "ar-SA",
     gender: Literal['female', 'male'] = 'female',
-    emotion: str = 'neutral'
+    emotion: str = 'neutral',
+    personality: dict = {}
 ) -> Optional[bytes]:
     """Use Edge TTS with dialect-aware neural voice."""
     try:
@@ -251,26 +252,3 @@ def get_voice_personality(personality: str) -> dict:
     تعديل نبرة الصوت بناءً على شخصية التوأم.
     """
     return VOICE_PERSONALITY.get(personality, {"pitch": "+0Hz", "rate": "+0%"})
-
-async def speakResponse(
-    text: str,
-    tier: str = 'free',
-    country_code: str = "SA",
-    gender: Literal['female', 'male'] = 'female',
-    emotion: str = 'neutral',
-    personality: str = 'supportive'
-) -> Optional[bytes]:
-    """
-    TTS entry point with Voice Personality.
-    """
-    # Apply personality modifiers
-    pers = get_voice_personality(personality)
-    # Merge with emotion params
-    # (Edge TTS function will accept custom rate/pitch)
-    if tier in ['premium', 'pro', 'yearly']:
-        result = await _elevenlabs_tts(text, gender)
-        if result:
-            return result
-
-    voice_code = get_voice_dialect(country_code)
-    return await _edge_tts(text, voice_code, gender, emotion, pers)
