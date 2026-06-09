@@ -1,44 +1,52 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useRef, useState, useEffect } from "react";
-import { TouchableOpacity, StyleSheet, Animated, Modal, View } from "react-native";
+import { useEffect, useRef } from "react";
+import { TouchableOpacity, StyleSheet, Animated, Modal, View, Pressable, useWindowDimensions } from "react-native";
 import { useTwinStore } from "../store/useTwinStore";
 import { initAnalytics } from "../lib/analytics";
 import CustomDrawerContent from "../components/CustomDrawerContent";
 import { ToastProvider } from "../components/Toast";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-// مكون القائمة الجانبية المنزلق (مع تحسينات بصرية)
-const SideMenu = ({ visible, onClose }: { visible: boolean; onClose: () => void }) => {
-  const { theme } = useTwinStore();
+const SideMenu = () => {
+  const { menuVisible, closeMenu, theme } = useTwinStore((s) => ({
+    menuVisible: s.menuVisible,
+    closeMenu: s.closeMenu,
+    theme: s.theme,
+  }));
   const isDark = theme === 'dark';
   const slideAnim = useRef(new Animated.Value(-300)).current;
+  const { width } = useWindowDimensions();
+  const drawerWidth = width * 0.8;
 
   useEffect(() => {
     Animated.timing(slideAnim, {
-      toValue: visible ? 0 : -300,
+      toValue: menuVisible ? 0 : -drawerWidth,
       duration: 280,
       useNativeDriver: true,
     }).start();
-  }, [visible]);
+  }, [menuVisible, drawerWidth]);
 
-  if (!visible) return null;
+  // Keep component mounted to allow exit animation
+  if (!menuVisible && slideAnim._value === -drawerWidth) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <Animated.View style={[styles.sidebar, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF' }, { transform: [{ translateX: slideAnim }] }]}>
-          <CustomDrawerContent onClose={onClose} />
+    <Modal visible={true} transparent animationType="none" onRequestClose={closeMenu}>
+      <Pressable style={styles.overlay} onPress={closeMenu}>
+        <Animated.View style={[styles.sidebar, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF', width: drawerWidth, transform: [{ translateX: slideAnim }] }]}>
+          <CustomDrawerContent onClose={closeMenu} />
         </Animated.View>
-      </TouchableOpacity>
+      </Pressable>
     </Modal>
   );
 };
 
 export default function Layout() {
-  const { theme } = useTwinStore();
+  const { theme, menuVisible } = useTwinStore((s) => ({
+    theme: s.theme,
+    menuVisible: s.menuVisible,
+  }));
   const isDark = theme === 'dark';
-  const [menuVisible, setMenuVisible] = useState(false);
 
   useEffect(() => {
     initAnalytics();
@@ -60,11 +68,7 @@ export default function Layout() {
           <Stack.Screen name="login" />
           <Stack.Screen name="onboarding" />
           <Stack.Screen name="terms" />
-          <Stack.Screen
-            name="chat"
-            options={{ headerShown: false }}
-            initialParams={{ onOpenMenu: () => setMenuVisible(true) }}
-          />
+          <Stack.Screen name="chat" options={{ headerShown: false }} />
           <Stack.Screen name="history" />
           <Stack.Screen name="profile" />
           <Stack.Screen name="memories" />
@@ -79,7 +83,7 @@ export default function Layout() {
           <Stack.Screen name="about" />
           <Stack.Screen name="referral" />
         </Stack>
-        <SideMenu visible={menuVisible} onClose={() => setMenuVisible(false)} />
+        {menuVisible && <SideMenu />}
       </ToastProvider>
     </ErrorBoundary>
   );
@@ -95,7 +99,6 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     bottom: 0,
-    width: 300,
     shadowColor: "#000",
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.3,

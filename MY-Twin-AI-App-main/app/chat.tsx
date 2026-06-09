@@ -1,7 +1,7 @@
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
   KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar,
-  Image, ActivityIndicator, Dimensions
+  Image, ActivityIndicator, Dimensions, Pressable
 } from 'react-native';
 import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -22,7 +22,6 @@ import { speakResponse } from '../utils/voice_engine';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TWIN_ICON = require('../assets/icon.png');
-const generateId = () => Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 
 const COLORS = {
   light: {
@@ -32,8 +31,8 @@ const COLORS = {
     inputBg: '#F8F8F8', inputBorder: '#EFEFEF', sendActive: '#6B21A8',
     sendInactive: '#E0D9F5', addBtnBg: '#F3F0FF', addBtnBorder: '#E0D9F5',
     suggestBg: '#F3F0FF', suggestBorder: '#E0D9F5', suggestText: '#6B21A8',
-    attachBg: '#FFF', overlay: 'rgba(0,0,0,0.5)',
-    featureBg: '#FFF', retryColor: '#EF4444',
+    attachBg: '#FFF', overlay: 'rgba(0,0,0,0.5)', featureBg: '#FFF',
+    retryColor: '#EF4444',
   },
   dark: {
     bg: '#1A1A1A', headerBg: '#1A1A1A', border: '#333',
@@ -42,8 +41,8 @@ const COLORS = {
     inputBg: '#333', inputBorder: '#555', sendActive: '#6B21A8',
     sendInactive: '#3A3A3A', addBtnBg: '#2A2A2A', addBtnBorder: '#444',
     suggestBg: '#2A2A2A', suggestBorder: '#444', suggestText: '#B794F4',
-    attachBg: '#2A2A2A', overlay: 'rgba(0,0,0,0.7)',
-    featureBg: '#2A2A2A', retryColor: '#EF4444',
+    attachBg: '#2A2A2A', overlay: 'rgba(0,0,0,0.7)', featureBg: '#2A2A2A',
+    retryColor: '#EF4444',
   },
 };
 
@@ -92,44 +91,50 @@ const ChatBubble = memo(({ item, isLast, pulseAnim, theme, onRetry, onCopy, onRe
   const isUser = item.role === 'user';
   const colors = theme === 'dark' ? COLORS.dark : COLORS.light;
   return (
-    <TouchableOpacity onLongPress={() => onCopy(item.content)} activeOpacity={0.8} style={[styles.msgRow, isUser ? styles.userRow : styles.twinRow]}>
-      {!isUser && (<Animated.View style={{ transform: [{ scale: isLast ? pulseAnim : 1 }] }}><Image source={TWIN_ICON} style={styles.avatar} resizeMode="contain" /></Animated.View>)}
+    <Pressable onLongPress={() => onCopy(item.content)} style={[styles.msgRow, isUser ? styles.userRow : styles.twinRow]}>
+      {!isUser && <Animated.View style={{ transform: [{ scale: isLast ? pulseAnim : 1 }] }}><Image source={TWIN_ICON} style={styles.avatar} resizeMode="contain" /></Animated.View>}
       <View style={[styles.bubble, isUser ? [styles.userBubble, { backgroundColor: colors.bubbleUser }] : [styles.twinBubble, { backgroundColor: colors.bubbleTwin }]]}>
         {item.image && <Image source={{ uri: item.image.startsWith('data:') ? item.image : `data:image/jpeg;base64,${item.image}` }} style={styles.chatImage} resizeMode="cover" />}
         <Text style={[isUser ? styles.userText : [styles.twinText, { color: colors.twinText }]]}>{item.content}</Text>
         <View style={styles.msgFooter}>
           <Text style={[styles.timestamp, { color: colors.subtext }]}>{item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</Text>
-          {item.failed && (
-            <TouchableOpacity onPress={() => onRetry(item)} style={styles.retryBtn}>
-              <RotateCcw size={12} stroke={colors.retryColor} /><Text style={[styles.retryText, { color: colors.retryColor }]}>Retry</Text>
-            </TouchableOpacity>
-          )}
-          {!isUser && !item.failed && isLast && onRegenerate && (
-            <TouchableOpacity onPress={() => onRegenerate(item)} style={styles.regenerateBtn}><RotateCcw size={12} stroke={colors.subtext} /></TouchableOpacity>
-          )}
+          {item.failed && <TouchableOpacity onPress={() => onRetry(item)} style={styles.retryBtn}><RotateCcw size={12} stroke={colors.retryColor} /><Text style={[styles.retryText, { color: colors.retryColor }]}>Retry</Text></TouchableOpacity>}
+          {!isUser && !item.failed && isLast && onRegenerate && <TouchableOpacity onPress={() => onRegenerate(item)} style={styles.regenerateBtn}><RotateCcw size={12} stroke={colors.subtext} /></TouchableOpacity>}
         </View>
       </View>
       {isUser && <View style={{ width: 36 }} />}
-    </TouchableOpacity>
+    </Pressable>
   );
 });
 
 export default function Chat() {
   const insets = useSafeAreaInsets();
-  const { userId, twinName, twinGender, tier, chatHistory, addMessage, updateBond, updateRelationshipDims, calmMode, triggerHaptic, lang, theme, setTwinName, setTwinGender } = useTwinStore();
+  const {
+    userId, twinName, twinGender, tier, chatHistory, addMessage, updateBond,
+    updateRelationshipDims, calmMode, triggerHaptic, lang, theme, setTwinName, setTwinGender,
+    openMenu, closeMenu, menuVisible, soundEnabled, setSoundEnabled
+  } = useTwinStore((s) => ({
+    userId: s.userId, twinName: s.twinName, twinGender: s.twinGender, tier: s.tier,
+    chatHistory: s.chatHistory, addMessage: s.addMessage, updateBond: s.updateBond,
+    updateRelationshipDims: s.updateRelationshipDims, calmMode: s.calmMode,
+    triggerHaptic: s.triggerHaptic, lang: s.lang, theme: s.theme,
+    setTwinName: s.setTwinName, setTwinGender: s.setTwinGender,
+    openMenu: s.openMenu, closeMenu: s.closeMenu, menuVisible: s.menuVisible,
+    soundEnabled: s.voiceEnabled, setSoundEnabled: s.setVoiceEnabled,
+  }));
+
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [showAttach, setShowAttach] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [featureModal, setFeatureModal] = useState<{ visible: boolean; type: string }>({ visible: false, type: '' });
   const [featureInput, setFeatureInput] = useState('');
   const [messageQueue, setMessageQueue] = useState<Array<{ msg?: string; image?: string }>>([]);
+
   const flatRef = useRef<FlatList<any>>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const slideAnim = useRef(new Animated.Value(-300)).current;
   const attachAnim = useRef(new Animated.Value(0)).current;
   const abortRef = useRef<AbortController | null>(null);
+
   const colors = theme === 'dark' ? COLORS.dark : COLORS.light;
   const isRTL = lang === 'ar';
   const isDark = theme === 'dark';
@@ -154,8 +159,6 @@ export default function Chat() {
   useEffect(() => { Animated.spring(attachAnim, { toValue: showAttach ? 1 : 0, useNativeDriver: true, tension: 65, friction: 11 }).start(); }, [showAttach]);
   useEffect(() => { if (messageQueue.length > 0 && !loading) { const next = messageQueue[0]; setMessageQueue(prev => prev.slice(1)); sendMessage(next.msg, next.image); } }, [messageQueue, loading]);
 
-  const openMenu = useCallback(() => { setMenuVisible(true); Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(); }, [slideAnim]);
-  const closeMenu = useCallback(() => { Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true }).start(() => setMenuVisible(false)); }, [slideAnim]);
   const countryCode = (Localization.region || 'SA').toUpperCase();
 
   const sendMessage = useCallback(async (msg?: string, imageBase64?: string) => {
@@ -166,7 +169,14 @@ export default function Chat() {
     addMessage('user', message || '📷 صورة', imageBase64);
     setInput(''); setLoading(true);
     try {
-      const res = await API.post('/api/chat', { message: message || 'صورة مرفقة', twin_name: twinName, bond_level: 0, relationship_dims: {}, calm_mode: calmMode, lang, image: imageBase64 || undefined }, { headers: { 'X-Calm-Mode': String(calmMode), 'X-Country-Code': countryCode, 'X-Twin-Gender': twinGender }, signal: abortRef.current.signal });
+      const res = await API.post('/api/chat', {
+        message: message || 'صورة مرفقة', twin_name: twinName, bond_level: 0,
+        relationship_dims: {}, calm_mode: calmMode, lang,
+        image: imageBase64 || undefined,
+      }, {
+        headers: { 'X-Calm-Mode': String(calmMode), 'X-Country-Code': countryCode, 'X-Twin-Gender': twinGender },
+        signal: abortRef.current.signal,
+      });
       addMessage('twin', res.data.reply);
       updateBond(res.data.new_bond ?? 0);
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
@@ -187,7 +197,6 @@ export default function Chat() {
   const handleRetry = useCallback((failedMsg: any) => { addMessage('user', failedMsg.content, failedMsg.image); sendMessage(failedMsg.content, failedMsg.image); }, [addMessage, sendMessage]);
   const handleRegenerate = useCallback((lastMsg: any) => { sendMessage(lastMsg.content); }, [sendMessage]);
   const handleCopy = useCallback((content: string) => { Alert.alert('✅', lang === 'ar' ? 'تم النسخ' : 'Copied'); }, [lang]);
-  const toggleSound = () => setSoundEnabled(prev => !prev);
 
   const handleCamera = useCallback(async () => {
     setShowAttach(false);
@@ -218,6 +227,8 @@ export default function Chat() {
     send(prompts[featureModal.type] + featureInput); setFeatureModal({ visible: false, type: '' }); setFeatureInput('');
   };
 
+  const toggleSound = () => setSoundEnabled(!soundEnabled);
+
   const renderMsg = useCallback(({ item, index }: { item: any; index: number }) => (
     <ChatBubble item={item} isLast={index === chatHistory.length - 1} pulseAnim={pulseAnim} theme={theme} onRetry={handleRetry} onCopy={handleCopy} onRegenerate={handleRegenerate} />
   ), [chatHistory.length, theme, handleRetry, handleCopy, handleRegenerate]);
@@ -243,6 +254,8 @@ export default function Chat() {
     return (<View style={styles.typingRow}><Image source={TWIN_ICON} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="contain" /><TypingIndicator /></View>);
   }, [loading]);
 
+  // سيتم إكمال الـ return في الجزء الثالث
+
   return (
     <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.bg }]}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
@@ -250,9 +263,7 @@ export default function Chat() {
         <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
           <TouchableOpacity onPress={openMenu} style={styles.headerBtn}><Menu size={22} stroke={colors.text} /></TouchableOpacity>
           <View style={styles.headerCenter}><Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{twinName || (lang === 'ar' ? 'توأمك' : 'Your Twin')}</Text></View>
-          <View style={styles.headerActions}>
-            <TouchableOpacity onPress={toggleSound} style={styles.headerBtn}>{soundEnabled ? <Volume2 size={20} stroke={colors.text} /> : <VolumeX size={20} stroke={colors.subtext} />}</TouchableOpacity>
-          </View>
+          <TouchableOpacity onPress={toggleSound} style={styles.headerBtn}>{soundEnabled ? <Volume2 size={20} stroke={colors.text} /> : <VolumeX size={20} stroke={colors.subtext} />}</TouchableOpacity>
         </View>
         <FlatList ref={flatRef} data={chatHistory} keyExtractor={(item: any, index: number) => item.id || index.toString()} renderItem={renderMsg} ListEmptyComponent={ListEmpty} ListFooterComponent={ListFooter} contentContainerStyle={styles.listContent} onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })} removeClippedSubviews initialNumToRender={15} maxToRenderPerBatch={10} windowSize={5} keyboardDismissMode="interactive" />
         <View style={[styles.inputBar, { backgroundColor: colors.headerBg, borderTopColor: colors.border }]}>
@@ -262,11 +273,6 @@ export default function Chat() {
             {loading ? <ActivityIndicator size="small" color={colors.subtext} /> : <Send size={18} stroke={input.trim().length > 0 ? '#FFF' : colors.subtext} />}
           </TouchableOpacity>
         </View>
-        <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
-          <TouchableOpacity style={[styles.overlay, { backgroundColor: colors.overlay }]} activeOpacity={1} onPress={closeMenu}>
-            <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }], backgroundColor: colors.bg }]}><SideMenu onClose={closeMenu} /></Animated.View>
-          </TouchableOpacity>
-        </Modal>
         <Modal visible={showAttach} transparent animationType="none" onRequestClose={() => setShowAttach(false)}>
           <TouchableOpacity style={styles.attachOverlay} activeOpacity={1} onPress={() => setShowAttach(false)}>
             <Animated.View style={[styles.attachContainer, { backgroundColor: colors.attachBg, transform: [{ translateY: attachAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }] }]}>
@@ -305,7 +311,6 @@ const styles = StyleSheet.create({
   headerBtn: { padding: 8 },
   headerCenter: { flex: 1, alignItems: 'center' },
   headerName: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
-  headerActions: { flexDirection: 'row', gap: 4 },
   listContent: { paddingHorizontal: 10, paddingVertical: 12, flexGrow: 1 },
   welcomeWrap: { alignItems: 'center', paddingTop: 50, paddingHorizontal: 20 },
   welcomeEmoji: { fontSize: 56, marginBottom: 16 },
@@ -336,8 +341,6 @@ const styles = StyleSheet.create({
   addBtnText: { fontSize: 20, fontWeight: '600' },
   textInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, fontSize: 15, maxHeight: 100, minHeight: 42, borderWidth: 1 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  overlay: { flex: 1 },
-  sidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 300 },
   attachOverlay: { flex: 1, justifyContent: 'flex-end' },
   attachContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 30 },
   attachHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
