@@ -1,37 +1,165 @@
-import { SafeAreaView, View, Text, StyleSheet, FlatList } from 'react-native';
-import { useTwinStore } from '../store/useTwinStore';
-import { BrainCircuit } from 'lucide-react-native';
-import { supabase } from '../lib/supabase';
-import { useState, useEffect } from 'react';
+import {
+  SafeAreaView, View, Text, StyleSheet,
+  FlatList, ActivityIndicator, RefreshControl,
+} from "react-native";
+import { useTwinStore } from "../store/useTwinStore";
+import { BrainCircuit, Heart, Star, Lightbulb } from "lucide-react-native";
+import { supabase } from "../lib/supabase";
+import { useState, useEffect, useCallback } from "react";
+
+interface Memory {
+  id: string;
+  user_id: string;
+  content: string;
+  created_at: string;
+  category?: string;
+  importance_score?: number;
+  emotional_tag?: string;
+}
+
+const CATEGORY_ICONS: Record<string, any> = {
+  pref:    Heart,
+  dream:   Star,
+  fact:    Lightbulb,
+  default: BrainCircuit,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  pref:    "#EC4899",
+  dream:   "#F59E0B",
+  fact:    "#3B82F6",
+  default: "#6B21A8",
+};
 
 export default function Memories() {
   const { lang, theme, userId } = useTwinStore();
-  const isAr = lang === 'ar';
-  const isDark = theme === 'dark';
-  const t = (ar: string, en: string) => isAr ? ar : en;
-  const [memories, setMemories] = useState<any[]>([]);
+  const isAr  = lang === "ar";
+  const isDark = theme === "dark";
+  const t = (ar: string, en: string) => (isAr ? ar : en);
 
-  useEffect(() => {
-    if (!userId) return;
-    supabase.from('memories').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(10).then(({ data }) => {
-      if (data) setMemories(data);
-    });
+  const [memories,   setMemories]   = useState<Memory[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [page,       setPage]       = useState(0);
+  const [hasMore,    setHasMore]    = useState(true);
+
+  const PAGE_SIZE = 15;
+
+  const fetchMemories = useCallback(async (pageNum = 0, replace = true) => {
+    if (!userId) { setLoading(false); return; }
+    try {
+      const from = pageNum * PAGE_SIZE;
+      const to   = from + PAGE_SIZE - 1;
+      const { data, error } = await supabase
+        .from("memories")
+        .select("id, user_id, content, created_at, category, importance_score, emotional_tag")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .range(from, to);
+
+      if (error) throw error;
+      const result = (data || []) as Memory[];
+      setMemories(prev => replace ? result : [...prev, ...result]);
+      setHasMore(result.length === PAGE_SIZE);
+      setPage(pageNum);
+    } catch (e) {
+      console.error("Memories load error:", e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, [userId]);
 
+  useEffect(() => { fetchMemories(0, true); }, [fetchMemories]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchMemories(0, true);
+  }, [fetchMemories]);
+
+  const onEndReached = useCallback(() => {
+    if (!hasMore || loading) return;
+    fetchMemories(page + 1, false);
+  }, [hasMore, loading, page, fetchMemories]);
+
+  const formatDate = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleDateString(isAr ? "ar-EG" : "en-US", {
+        year: "numeric", month: "short", day: "numeric",
+      });
+    } catch { return ""; }
+  };
+
+  const bg    = isDark ? "#1A1A1A" : "#F8F6F2";
+  const card  = isDark ? "#2A2A2A" : "#FFF";
+  const border = isDark ? "#444"   : "#F0F0F0";
+  const txt   = isDark ? "#FFF"    : "#1A1A1A";
+  const sub   = isDark ? "#888"    : "#666";
+
+  const renderItem = ({ item }: { item: Memory }) => {
+    const cat     = item.category || "default";
+    const Icon    = CATEGORY_ICONS[cat]  || BrainCircuit;
+    const color   = CATEGORY_COLORS[cat] || "#6B21A8";
+    const isImportant = (item.importance_score ?? 0) > 0.7;
+
+    return (
+      <View style={[s.row, { backgroundColor: card, borderColor: border }]}>
+        <View style={[s.iconWrap, { backgroundColor: color + "20" }]}>
+          <Icon size={16} color={color} />
+        </View>
+        <View style={s.rowContent}>
+          <Text style={[s.text, { color: txt }]}>{item.content}</Text>
+          <View style={s.metaRow}>
+            <Text style={[s.date, { color: sub }]}>{formatDate(item.created_at)}</Text>
+            {isImportant && <Text style={s.star}>⭐</Text>}
+            {item.emotional_tag && (
+              <Text style={[s.tag, { color }]}>{item.emotional_tag}</Text>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={[s.safe, { backgroundColor: bg }]}>
+        <ActivityIndicator size="large" color="#6B21A8" style={s.loader} />
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <View style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
-        <Text style={[s.title, isDark && { color: '#FFF' }]}>{t('ذكريات','Memories')}</Text>
+    <SafeAreaView style={[s.safe, { backgroundColor: bg }]}>
+      <View style={[s.container, { backgroundColor: bg }]}>
+        <Text style={[s.title, { color: txt }]}>
+          {t("ذكرياتي 🧠", "My Memories 🧠")}
+        </Text>
         <FlatList
           data={memories}
-          keyExtractor={item => item.id}
-          ListEmptyComponent={<Text style={[s.empty, isDark && { color: '#666' }]}>{t('لا توجد ذكريات','No memories')}</Text>}
-          renderItem={({ item }) => (
-            <View style={[s.row, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]}>
-              <BrainCircuit size={16} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-              <Text style={[s.text, isDark && { color: '#FFF' }]}>{item.content}</Text>
-            </View>
-          )}
+          keyExtractor={(item, index) => item.id || `memory-${index}`}
+          renderItem={renderItem}
+          contentContainerStyle={{ paddingBottom: 40 }}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#6B21A8"]}
+              tintColor="#6B21A8"
+            />
+          }
+          onEndReached={onEndReached}
+          onEndReachedThreshold={0.3}
+          ListEmptyComponent={
+            <Text style={[s.empty, { color: sub }]}>
+              {t("لا توجد ذكريات بعد 💭", "No memories yet 💭")}
+            </Text>
+          }
+          ListFooterComponent={
+            hasMore ? (
+              <ActivityIndicator size="small" color="#6B21A8" style={{ marginVertical: 16 }} />
+            ) : null
+          }
         />
       </View>
     </SafeAreaView>
@@ -39,10 +167,17 @@ export default function Memories() {
 }
 
 const s = StyleSheet.create({
-  safe: { flex: 1 },
-  container: { flex: 1, padding: 20, backgroundColor: '#F8F6F2' },
-  title: { fontSize: 24, fontWeight: '800', color: '#1A1A1A', marginBottom: 20 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 16, backgroundColor: '#FFF', borderRadius: 12, marginBottom: 8, borderWidth: 1, borderColor: '#F0F0F0' },
-  text: { fontSize: 15, color: '#1A1A1A' },
-  empty: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
+  safe:       { flex: 1 },
+  container:  { flex: 1, padding: 20 },
+  loader:     { flex: 1, marginTop: 80 },
+  title:      { fontSize: 24, fontWeight: "800", marginBottom: 20 },
+  row:        { flexDirection: "row", alignItems: "flex-start", padding: 14, borderRadius: 14, marginBottom: 10, borderWidth: 1 },
+  iconWrap:   { width: 32, height: 32, borderRadius: 10, justifyContent: "center", alignItems: "center", marginRight: 12, marginTop: 2 },
+  rowContent: { flex: 1 },
+  text:       { fontSize: 15, lineHeight: 22, marginBottom: 6 },
+  metaRow:    { flexDirection: "row", alignItems: "center", flexWrap: "wrap" },
+  date:       { fontSize: 12 },
+  star:       { fontSize: 12, marginLeft: 6 },
+  tag:        { fontSize: 11, marginLeft: 8, fontWeight: "600" },
+  empty:      { textAlign: "center", marginTop: 60, fontSize: 15 },
 });
