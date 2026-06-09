@@ -42,7 +42,8 @@ class TwinBrain:
 
     def __init__(self, gemini_key=None):
         self.multi = MultiAIClient()
-        self.emotion_tracker = EmotionalStateTracker(gemini_key)
+        # ✅ EmotionalStateTracker لا يقبل معاملات
+        self.emotion_tracker = EmotionalStateTracker()
         self.reasoning_engine = ReasoningEngine(gemini_key)
         self.relationship = RelationshipEngine()
         self.prompt_builder = PromptBuilder()
@@ -198,7 +199,7 @@ class TwinBrain:
 
         tracker.end()
 
-        # 16. Product Recommendation (جديد)
+        # 16. Product Recommendation
         if user_id and tier and reply:
             try:
                 reply = await product_recommender.process_and_attach(
@@ -282,4 +283,4 @@ class TwinBrain:
 
 # نسخة عالمية
 twin_brain = TwinBrain()
-print("✅ Twin Brain v4.1 | Product Recommender مدمج | جاهز")
+print("✅ Twin Brain v4.1 | EmotionalStateTracker متوافق | جاهز")
