@@ -1,7 +1,10 @@
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar, Image } from 'react-native';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import {
+  View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
+  KeyboardAvoidingView, Platform, Modal, Animated, Alert, StatusBar,
+  Image, ActivityIndicator, Dimensions
+} from 'react-native';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { router, Href } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -10,58 +13,106 @@ import { supabase } from '../lib/supabase';
 import { useTwinStore } from '../store/useTwinStore';
 import { API } from '../lib/api';
 import SideMenu from '../components/SideMenu';
-import { Menu, Send, Plus, X } from 'lucide-react-native';
+import TypingIndicator from '../components/TypingIndicator';
+import {
+  Menu, Send, X, Volume2, VolumeX, RotateCcw,
+  Camera, Image as ImageIcon, FileText, Search, Dumbbell, Moon
+} from 'lucide-react-native';
 import { speakResponse } from '../utils/voice_engine';
 
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const TWIN_ICON = require('../assets/icon.png');
+const generateId = () => Math.random().toString(36).substr(2, 9) + Date.now().toString(36);
 
-function AnimBtn({ onPress, style, children }: { onPress?: () => void; style?: any; children: React.ReactNode }) {
-  const scale = useRef(new Animated.Value(1)).current;
-  const handlePress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    Animated.sequence([
-      Animated.spring(scale, { toValue: 0.88, useNativeDriver: true, speed: 50 }),
-      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 30 }),
-    ]).start();
-    onPress?.();
-  }, [onPress]);
-  return (
-    <TouchableOpacity onPress={handlePress} activeOpacity={1}>
-      <Animated.View style={[style, { transform: [{ scale }] }]}>{children}</Animated.View>
-    </TouchableOpacity>
-  );
-}
+const COLORS = {
+  light: {
+    bg: '#FFFFFF', headerBg: '#FFFFFF', border: '#F0F0F0',
+    text: '#1A1A1A', subtext: '#666', bubbleUser: '#6B21A8',
+    bubbleTwin: 'transparent', userText: '#FFF', twinText: '#1A1A1A',
+    inputBg: '#F8F8F8', inputBorder: '#EFEFEF', sendActive: '#6B21A8',
+    sendInactive: '#E0D9F5', addBtnBg: '#F3F0FF', addBtnBorder: '#E0D9F5',
+    suggestBg: '#F3F0FF', suggestBorder: '#E0D9F5', suggestText: '#6B21A8',
+    attachBg: '#FFF', overlay: 'rgba(0,0,0,0.5)',
+    featureBg: '#FFF', retryColor: '#EF4444',
+  },
+  dark: {
+    bg: '#1A1A1A', headerBg: '#1A1A1A', border: '#333',
+    text: '#FFF', subtext: '#999', bubbleUser: '#6B21A8',
+    bubbleTwin: '#2A2A2A', userText: '#FFF', twinText: '#FFF',
+    inputBg: '#333', inputBorder: '#555', sendActive: '#6B21A8',
+    sendInactive: '#3A3A3A', addBtnBg: '#2A2A2A', addBtnBorder: '#444',
+    suggestBg: '#2A2A2A', suggestBorder: '#444', suggestText: '#B794F4',
+    attachBg: '#2A2A2A', overlay: 'rgba(0,0,0,0.7)',
+    featureBg: '#2A2A2A', retryColor: '#EF4444',
+  },
+};
 
-function getWelcome(lang: 'ar' | 'en') {
+function getWelcome(lang: string) {
   const h = new Date().getHours();
   if (lang === 'ar') {
-    if (h >= 6 && h < 12) return { emoji: '🌅', text: 'صباح الخير! كيف حالك اليوم؟' };
-    if (h >= 12 && h < 18) return { emoji: '🌞', text: 'مرحباً! كيف يومك؟' };
-    if (h >= 18 && h < 24) return { emoji: '🌙', text: 'مساء الخير! كيف كان يومك؟' };
-    return { emoji: '🌃', text: 'سهرة سعيدة! لنكن معاً؟' };
+    if (h >= 6 && h < 12) return { emoji: '🌅', text: 'صباح الخير!', sub: 'كيف حالك اليوم؟' };
+    if (h >= 12 && h < 18) return { emoji: '🌞', text: 'مرحباً!', sub: 'كيف تسير أمورك؟' };
+    if (h >= 18 && h < 24) return { emoji: '🌙', text: 'مساء الخير!', sub: 'كيف كان يومك؟' };
+    return { emoji: '🌃', text: 'سهرة سعيدة!', sub: 'أنا هنا معك 💜' };
   }
-  if (h >= 6 && h < 12) return { emoji: '🌅', text: 'Good morning! How are you today?' };
-  if (h >= 12 && h < 18) return { emoji: '🌞', text: 'Hello! How is your day?' };
-  if (h >= 18 && h < 24) return { emoji: '🌙', text: 'Good evening! How was your day?' };
-  return { emoji: '🌃', text: 'Happy late night! Shall we talk?' };
+  if (h >= 6 && h < 12) return { emoji: '🌅', text: 'Good Morning!', sub: 'How are you today?' };
+  if (h >= 12 && h < 18) return { emoji: '🌞', text: 'Hello!', sub: 'How is your day going?' };
+  if (h >= 18 && h < 24) return { emoji: '🌙', text: 'Good Evening!', sub: 'How was your day?' };
+  return { emoji: '🌃', text: 'Late Night!', sub: "I'm here with you 💜" };
 }
 
-function getSuggestions(lang: 'ar' | 'en') {
+function getSuggestions(lang: string) {
   if (lang === 'ar') return [
-    { prompt: 'لنتحدث عن أي شيء' },
-    { prompt: 'أريد مساعدتك في مهمة' },
-    { prompt: 'أريد أن أفهم مشاعري' },
-    { prompt: 'لنكتب شيئاً معاً' },
+    { emoji: '💬', prompt: 'لنتحدث عن أي شيء' },
+    { emoji: '🤝', prompt: 'أحتاج مساعدتك' },
+    { emoji: '💭', prompt: 'أريد أن أفهم مشاعري' },
+    { emoji: '✨', prompt: 'لنبدع شيئاً معاً' },
   ];
   return [
-    { prompt: "Let's talk" },
-    { prompt: 'I need help' },
-    { prompt: 'Help me understand my feelings' },
-    { prompt: "Let's create together" },
+    { emoji: '💬', prompt: "Let's talk" },
+    { emoji: '🤝', prompt: 'I need your help' },
+    { emoji: '💭', prompt: 'Help me understand my feelings' },
+    { emoji: '✨', prompt: "Let's create together" },
   ];
 }
 
-type ChatMessage = { role: 'user' | 'twin'; content: string; image?: string };
+const ATTACH_ITEMS = [
+  { icon: Camera, label_ar: 'كاميرا', label_en: 'Camera', action: 'camera', color: '#8B5CF6' },
+  { icon: ImageIcon, label_ar: 'معرض الصور', label_en: 'Gallery', action: 'image', color: '#EC4899' },
+  { icon: FileText, label_ar: 'ملف', label_en: 'File', action: 'file', color: '#F59E0B' },
+  { icon: Search, label_ar: 'بحث', label_en: 'Search', action: 'search', color: '#10B981' },
+  { icon: Dumbbell, label_ar: 'جلسة تدريب', label_en: 'Coaching', action: 'coach', color: '#3B82F6' },
+  { icon: Moon, label_ar: 'تفسير حلم', label_en: 'Dream Analysis', action: 'dream', color: '#6366F1' },
+];
+
+const ChatBubble = memo(({ item, isLast, pulseAnim, theme, onRetry, onCopy, onRegenerate }: {
+  item: any; isLast: boolean; pulseAnim: Animated.Value; theme: string;
+  onRetry: (msg: any) => void; onCopy: (content: string) => void; onRegenerate?: (msg: any) => void;
+}) => {
+  const isUser = item.role === 'user';
+  const colors = theme === 'dark' ? COLORS.dark : COLORS.light;
+  return (
+    <TouchableOpacity onLongPress={() => onCopy(item.content)} activeOpacity={0.8} style={[styles.msgRow, isUser ? styles.userRow : styles.twinRow]}>
+      {!isUser && (<Animated.View style={{ transform: [{ scale: isLast ? pulseAnim : 1 }] }}><Image source={TWIN_ICON} style={styles.avatar} resizeMode="contain" /></Animated.View>)}
+      <View style={[styles.bubble, isUser ? [styles.userBubble, { backgroundColor: colors.bubbleUser }] : [styles.twinBubble, { backgroundColor: colors.bubbleTwin }]]}>
+        {item.image && <Image source={{ uri: item.image.startsWith('data:') ? item.image : `data:image/jpeg;base64,${item.image}` }} style={styles.chatImage} resizeMode="cover" />}
+        <Text style={[isUser ? styles.userText : [styles.twinText, { color: colors.twinText }]]}>{item.content}</Text>
+        <View style={styles.msgFooter}>
+          <Text style={[styles.timestamp, { color: colors.subtext }]}>{item.timestamp ? new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}</Text>
+          {item.failed && (
+            <TouchableOpacity onPress={() => onRetry(item)} style={styles.retryBtn}>
+              <RotateCcw size={12} stroke={colors.retryColor} /><Text style={[styles.retryText, { color: colors.retryColor }]}>Retry</Text>
+            </TouchableOpacity>
+          )}
+          {!isUser && !item.failed && isLast && onRegenerate && (
+            <TouchableOpacity onPress={() => onRegenerate(item)} style={styles.regenerateBtn}><RotateCcw size={12} stroke={colors.subtext} /></TouchableOpacity>
+          )}
+        </View>
+      </View>
+      {isUser && <View style={{ width: 36 }} />}
+    </TouchableOpacity>
+  );
+});
 
 export default function Chat() {
   const insets = useSafeAreaInsets();
@@ -73,106 +124,70 @@ export default function Chat() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [featureModal, setFeatureModal] = useState<{ visible: boolean; type: string }>({ visible: false, type: '' });
   const [featureInput, setFeatureInput] = useState('');
-  const flatRef = useRef<FlatList<ChatMessage>>(null);
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const [messageQueue, setMessageQueue] = useState<Array<{ msg?: string; image?: string }>>([]);
+  const flatRef = useRef<FlatList<any>>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const attachAnim = useRef(new Animated.Value(0)).current;
+  const abortRef = useRef<AbortController | null>(null);
+  const colors = theme === 'dark' ? COLORS.dark : COLORS.light;
   const isRTL = lang === 'ar';
+  const isDark = theme === 'dark';
   const welcome = getWelcome(lang);
   const suggestions = getSuggestions(lang);
   const isFree = tier === 'free';
-  const isDark = theme === 'dark';
-  const isDarkMode = theme === 'dark';
 
-  // --- نبض الأيقونة بعد كل رد ---
   useEffect(() => {
-    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1].role === 'twin') {
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
-      ]).start();
+    if (chatHistory.length > 0 && chatHistory[chatHistory.length - 1]?.role === 'twin') {
+      Animated.sequence([Animated.timing(pulseAnim, { toValue: 1.4, duration: 200, useNativeDriver: true }), Animated.timing(pulseAnim, { toValue: 1, duration: 200, useNativeDriver: true })]).start();
     }
   }, [chatHistory]);
 
-  // --- قراءة بيانات التوأم من Supabase ---
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('twin_name, twin_gender')
-          .eq('id', userId)
-          .single();
-        if (profile) {
-          if (profile.twin_name) setTwinName(profile.twin_name);
-          if (profile.twin_gender) setTwinGender(profile.twin_gender);
-        }
-      } catch (e) {
-        console.warn('Failed to fetch profile data:', e);
-      }
-    };
-    fetchProfile();
+    (async () => {
+      const { data: profile } = await supabase.from('profiles').select('twin_name, twin_gender').eq('id', userId).single();
+      if (profile) { if (profile.twin_name) setTwinName(profile.twin_name); if (profile.twin_gender) setTwinGender(profile.twin_gender); }
+    })();
   }, [userId]);
 
-  // --- التمرير التلقائي ---
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      flatRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [chatHistory]);
-
-  // --- أنيميشن المرفقات ---
-  useEffect(() => {
-    Animated.spring(attachAnim, { toValue: showAttach ? 1 : 0, useNativeDriver: true, tension: 65, friction: 11 }).start();
-  }, [showAttach]);
+  useEffect(() => { const t = setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 100); return () => clearTimeout(t); }, [chatHistory]);
+  useEffect(() => { Animated.spring(attachAnim, { toValue: showAttach ? 1 : 0, useNativeDriver: true, tension: 65, friction: 11 }).start(); }, [showAttach]);
+  useEffect(() => { if (messageQueue.length > 0 && !loading) { const next = messageQueue[0]; setMessageQueue(prev => prev.slice(1)); sendMessage(next.msg, next.image); } }, [messageQueue, loading]);
 
   const openMenu = useCallback(() => { setMenuVisible(true); Animated.timing(slideAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start(); }, [slideAnim]);
   const closeMenu = useCallback(() => { Animated.timing(slideAnim, { toValue: -300, duration: 200, useNativeDriver: true }).start(() => setMenuVisible(false)); }, [slideAnim]);
-
   const countryCode = (Localization.region || 'SA').toUpperCase();
 
-  const send = useCallback(async (msg?: string, imageBase64?: string) => {
+  const sendMessage = useCallback(async (msg?: string, imageBase64?: string) => {
     const message = (msg || input).trim();
     if (!message && !imageBase64) return;
-    if (loading) return;
-    triggerHaptic();
+    if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new AbortController();
     addMessage('user', message || '📷 صورة', imageBase64);
-    setInput('');
-    setLoading(true);
+    setInput(''); setLoading(true);
     try {
-      const res = await API.post('/api/chat', {
-        message: message || 'صورة مرفقة',
-        twin_name: twinName,
-        bond_level: 0,
-        relationship_dims: {},
-        calm_mode: calmMode,
-        lang,
-        image: imageBase64 || undefined,
-      }, {
-        headers: {
-          'X-Calm-Mode': String(calmMode),
-          'X-Country-Code': countryCode,
-          'X-Twin-Gender': twinGender,
-        },
-      });
+      const res = await API.post('/api/chat', { message: message || 'صورة مرفقة', twin_name: twinName, bond_level: 0, relationship_dims: {}, calm_mode: calmMode, lang, image: imageBase64 || undefined }, { headers: { 'X-Calm-Mode': String(calmMode), 'X-Country-Code': countryCode, 'X-Twin-Gender': twinGender }, signal: abortRef.current.signal });
       addMessage('twin', res.data.reply);
       updateBond(res.data.new_bond ?? 0);
       if (res.data.dims_update) updateRelationshipDims(res.data.dims_update);
-      if (soundEnabled) {
-        try {
-          await speakResponse(res.data.reply, { pitch: 1.0, rate: 1.0 });
-        } catch (e) {
-          console.log('TTS playback failed:', e);
-        }
-      }
+      if (soundEnabled) { try { await speakResponse(res.data.reply, { pitch: 1.0, rate: 1.0 }); } catch {} }
     } catch (error: any) {
+      if (error.name === 'AbortError') return;
       const status = error?.response?.status;
       if (status === 401) addMessage('twin', lang === 'ar' ? 'انتهت جلستك 🔒' : 'Session expired 🔒');
       else addMessage('twin', lang === 'ar' ? 'تعذر الاتصال 😔' : 'Connection failed 😔');
     } finally { setLoading(false); }
-  }, [input, loading, twinName, calmMode, lang, addMessage, updateBond, updateRelationshipDims, triggerHaptic, soundEnabled, twinGender, countryCode]);
+  }, [input, loading, twinName, calmMode, lang, addMessage, updateBond, updateRelationshipDims, soundEnabled, twinGender, countryCode]);
+
+  const send = useCallback(async (msg?: string, imageBase64?: string) => {
+    if (loading) { setMessageQueue(prev => [...prev, { msg, image: imageBase64 }]); return; }
+    triggerHaptic(); await sendMessage(msg, imageBase64);
+  }, [loading, sendMessage, triggerHaptic]);
+
+  const handleRetry = useCallback((failedMsg: any) => { addMessage('user', failedMsg.content, failedMsg.image); sendMessage(failedMsg.content, failedMsg.image); }, [addMessage, sendMessage]);
+  const handleRegenerate = useCallback((lastMsg: any) => { sendMessage(lastMsg.content); }, [sendMessage]);
+  const handleCopy = useCallback((content: string) => { Alert.alert('✅', lang === 'ar' ? 'تم النسخ' : 'Copied'); }, [lang]);
+  const toggleSound = () => setSoundEnabled(prev => !prev);
 
   const handleCamera = useCallback(async () => {
     setShowAttach(false);
@@ -191,162 +206,91 @@ export default function Chat() {
       const r = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, base64: true });
       if (!r.canceled && r.assets?.[0]?.base64) send('', r.assets[0].base64);
     } else if (action === 'file') {
-      try {
-        const res = await DocumentPicker.getDocumentAsync({ type: '*/*' });
-        if (!res.canceled && res.assets?.[0]) send('📄 ملف مرفق');
-      } catch (e) { Alert.alert('خطأ', lang === 'ar' ? 'فشل اختيار الملف' : 'File selection failed'); }
+      try { const res = await DocumentPicker.getDocumentAsync({ type: '*/*' }); if (!res.canceled && res.assets?.[0]) send('📄 ' + (res.assets[0].name || 'ملف مرفق')); } catch { Alert.alert('خطأ', lang === 'ar' ? 'فشل اختيار الملف' : 'File selection failed'); }
     } else if (action === 'coach' || action === 'dream') {
       if (isFree) { Alert.alert(lang === 'ar' ? 'ترقية' : 'Upgrade', lang === 'ar' ? 'الميزة حصرية للباقات المدفوعة' : 'Feature exclusive to paid plans'); return; }
-      setFeatureModal({ visible: true, type: action });
-      setFeatureInput('');
-    } else if (action === 'search') {
-      setFeatureModal({ visible: true, type: 'search' });
-      setFeatureInput('');
-    }
+      setFeatureModal({ visible: true, type: action }); setFeatureInput('');
+    } else if (action === 'search') { setFeatureModal({ visible: true, type: 'search' }); setFeatureInput(''); }
   }, [send, lang, handleCamera, isFree]);
 
   const handleFeatureSend = () => {
-    const prompts: Record<string, string> = {
-      search: '/search ',
-      coach: lang === 'ar' ? 'أريد جلسة تدريب: ' : 'Coaching session: ',
-      dream: lang === 'ar' ? 'أريد تحليل حلمي: ' : 'Dream analysis: ',
-    };
-    send(prompts[featureModal.type] + featureInput);
-    setFeatureModal({ visible: false, type: '' });
-    setFeatureInput('');
+    const prompts: Record<string, string> = { search: '/search ', coach: lang === 'ar' ? 'أريد جلسة تدريب: ' : 'Coaching session: ', dream: lang === 'ar' ? 'أريد تحليل حلمي: ' : 'Dream analysis: ' };
+    send(prompts[featureModal.type] + featureInput); setFeatureModal({ visible: false, type: '' }); setFeatureInput('');
   };
 
-  const attachItems = [
-    { icon: '📷', label: lang === 'ar' ? 'كاميرا' : 'Camera', action: 'camera' },
-    { icon: '🖼️', label: lang === 'ar' ? 'معرض' : 'Gallery', action: 'image' },
-    { icon: '📄', label: lang === 'ar' ? 'ملف' : 'File', action: 'file' },
-    { icon: '🔍', label: lang === 'ar' ? 'بحث' : 'Search', action: 'search' },
-    { icon: '💪', label: lang === 'ar' ? 'تدريب' : 'Coaching', action: 'coach' },
-    { icon: '🌙', label: lang === 'ar' ? 'تفسير أحلام' : 'Dreams', action: 'dream' },
-  ];
-
-  const renderMsg = useCallback(({ item, index }: { item: ChatMessage; index: number }) => {
-    const isUser = item.role === 'user';
-    const isDark = theme === 'dark';
-    return (
-      <View style={[s.msgRow, isUser ? s.userRow : s.twinRow, isDark && { backgroundColor: 'transparent' }]}>
-        {!isUser && (
-          <Animated.View style={{ transform: [{ scale: index === chatHistory.length - 1 ? pulseAnim : 1 }] }}>
-            <Image source={TWIN_ICON} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="contain" />
-          </Animated.View>
-        )}
-        <View style={[s.bubble, isUser ? s.userBubble : s.twinBubble]}>
-          <Text style={isUser ? s.userText : s.twinText}>{item.content}</Text>
-        </View>
-      </View>
-    );
-  }, [chatHistory.length, theme, pulseAnim]);
+  const renderMsg = useCallback(({ item, index }: { item: any; index: number }) => (
+    <ChatBubble item={item} isLast={index === chatHistory.length - 1} pulseAnim={pulseAnim} theme={theme} onRetry={handleRetry} onCopy={handleCopy} onRegenerate={handleRegenerate} />
+  ), [chatHistory.length, theme, handleRetry, handleCopy, handleRegenerate]);
 
   const ListEmpty = useCallback(() => (
-    <View style={s.welcomeWrap}>
-      <Text style={s.welcomeEmoji}>{welcome.emoji}</Text>
-      <Text style={s.welcomeText}>{welcome.text}</Text>
-      <View style={s.suggestRow}>
+    <View style={styles.welcomeWrap}>
+      <Text style={styles.welcomeEmoji}>{welcome.emoji}</Text>
+      <Text style={[styles.welcomeTitle, { color: colors.text }]}>{welcome.text}</Text>
+      <Text style={[styles.welcomeSub, { color: colors.subtext }]}>{welcome.sub}</Text>
+      <View style={styles.suggestRow}>
         {suggestions.map((item, i) => (
-          <TouchableOpacity key={i} style={s.suggestBtn} onPress={() => send(item.prompt)}>
-            <Text style={s.suggestText}>{item.prompt}</Text>
+          <TouchableOpacity key={i} style={[styles.suggestBtn, { backgroundColor: colors.suggestBg, borderColor: colors.suggestBorder }]} onPress={() => send(item.prompt)}>
+            <Text style={styles.suggestEmoji}>{item.emoji}</Text>
+            <Text style={[styles.suggestText, { color: colors.suggestText }]}>{item.prompt}</Text>
           </TouchableOpacity>
         ))}
       </View>
     </View>
-  ), [welcome, suggestions, send]);
+  ), [welcome, suggestions, send, colors]);
+
+  const ListFooter = useCallback(() => {
+    if (!loading) return null;
+    return (<View style={styles.typingRow}><Image source={TWIN_ICON} style={{ width: 28, height: 28, borderRadius: 14 }} resizeMode="contain" /><TypingIndicator /></View>);
+  }, [loading]);
 
   return (
-    <View style={[s.root, { paddingTop: insets.top }, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={isDark ? '#1A1A1A' : '#FFFFFF'} />
+    <View style={[styles.root, { paddingTop: insets.top, backgroundColor: colors.bg }]}>
+      <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor={colors.bg} />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <View style={[s.header, isDark && { backgroundColor: '#1A1A1A', borderBottomColor: '#333' }]}>
-          <TouchableOpacity onPress={openMenu} style={s.menuBtn}>
-            <Menu size={22} stroke={isDark ? '#FFF' : '#1A1A1A'} />
-          </TouchableOpacity>
-          <Text style={[s.headerName, isDark && { color: '#FFF' }]}>{twinName || (lang === 'ar' ? 'توأمك' : 'Your Twin')}</Text>
-          <View style={{ width: 22 }} />
+        <View style={[styles.header, { backgroundColor: colors.headerBg, borderBottomColor: colors.border }]}>
+          <TouchableOpacity onPress={openMenu} style={styles.headerBtn}><Menu size={22} stroke={colors.text} /></TouchableOpacity>
+          <View style={styles.headerCenter}><Text style={[styles.headerName, { color: colors.text }]} numberOfLines={1}>{twinName || (lang === 'ar' ? 'توأمك' : 'Your Twin')}</Text></View>
+          <View style={styles.headerActions}>
+            <TouchableOpacity onPress={toggleSound} style={styles.headerBtn}>{soundEnabled ? <Volume2 size={20} stroke={colors.text} /> : <VolumeX size={20} stroke={colors.subtext} />}</TouchableOpacity>
+          </View>
         </View>
-
-        <FlatList
-          ref={flatRef}
-          data={chatHistory}
-          keyExtractor={(_, i) => i.toString()}
-          renderItem={renderMsg}
-          ListEmptyComponent={ListEmpty}
-          contentContainerStyle={s.listContent}
-          onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
-          removeClippedSubviews
-          initialNumToRender={15}
-        />
-
-        <View style={[s.inputBar, isDark && { backgroundColor: '#1A1A1A', borderTopColor: '#333' }]}>
-          <TouchableOpacity onPress={() => setShowAttach(true)} style={s.addBtn}>
-            <Text style={s.addBtnText}>+</Text>
-          </TouchableOpacity>
-          <TextInput
-            style={[s.textInput, isRTL && { textAlign: 'right' }, isDark && { backgroundColor: '#333', color: '#FFF', borderColor: '#555' }]}
-            value={input}
-            onChangeText={setInput}
-            placeholder={lang === 'ar' ? 'أنا هنا لأجلك... 💜' : "I'm here for you... 💜"}
-            placeholderTextColor="#C4B5D4"
-            multiline
-            maxLength={2000}
-            onSubmitEditing={() => send()}
-          />
-          <TouchableOpacity
-            onPress={() => send()}
-            style={[s.sendBtn, { backgroundColor: input.trim().length > 0 ? '#6B21A8' : '#E0D9F5' }]}
-          >
-            <Send size={18} stroke={input.trim().length > 0 ? '#FFF' : '#C4B5D4'} />
+        <FlatList ref={flatRef} data={chatHistory} keyExtractor={(item: any, index: number) => item.id || index.toString()} renderItem={renderMsg} ListEmptyComponent={ListEmpty} ListFooterComponent={ListFooter} contentContainerStyle={styles.listContent} onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })} removeClippedSubviews initialNumToRender={15} maxToRenderPerBatch={10} windowSize={5} keyboardDismissMode="interactive" />
+        <View style={[styles.inputBar, { backgroundColor: colors.headerBg, borderTopColor: colors.border }]}>
+          <TouchableOpacity onPress={() => setShowAttach(true)} style={[styles.addBtn, { backgroundColor: colors.addBtnBg, borderColor: colors.addBtnBorder }]}><Text style={[styles.addBtnText, { color: colors.sendActive }]}>+</Text></TouchableOpacity>
+          <TextInput style={[styles.textInput, isRTL && { textAlign: 'right' }, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]} value={input} onChangeText={setInput} placeholder={lang === 'ar' ? 'اكتب رسالتك... 💜' : 'Type your message... 💜'} placeholderTextColor={colors.subtext} multiline maxLength={2000} editable={!loading} onSubmitEditing={() => send()} returnKeyType="send" />
+          <TouchableOpacity onPress={() => send()} disabled={loading || (input.trim().length === 0 && !loading)} style={[styles.sendBtn, { backgroundColor: (input.trim().length > 0 && !loading) ? colors.sendActive : colors.sendInactive }]}>
+            {loading ? <ActivityIndicator size="small" color={colors.subtext} /> : <Send size={18} stroke={input.trim().length > 0 ? '#FFF' : colors.subtext} />}
           </TouchableOpacity>
         </View>
-
         <Modal visible={menuVisible} transparent animationType="none" onRequestClose={closeMenu}>
-          <TouchableOpacity style={s.overlay} activeOpacity={1} onPress={closeMenu}>
-            <Animated.View style={[s.sidebar, { transform: [{ translateX: slideAnim }] }, isDark && { backgroundColor: '#1A1A1A' }]}>
-              <SideMenu onClose={closeMenu} />
-            </Animated.View>
+          <TouchableOpacity style={[styles.overlay, { backgroundColor: colors.overlay }]} activeOpacity={1} onPress={closeMenu}>
+            <Animated.View style={[styles.sidebar, { transform: [{ translateX: slideAnim }], backgroundColor: colors.bg }]}><SideMenu onClose={closeMenu} /></Animated.View>
           </TouchableOpacity>
         </Modal>
-
         <Modal visible={showAttach} transparent animationType="none" onRequestClose={() => setShowAttach(false)}>
-          <TouchableOpacity style={s.modalOverlay} activeOpacity={1} onPress={() => setShowAttach(false)}>
-            <Animated.View style={[s.attachMenu, { transform: [{ translateY: attachAnim.interpolate({ inputRange: [0, 1], outputRange: [300, 0] }) }], opacity: attachAnim }, isDark && { backgroundColor: '#2A2A2A' }]}>
-              {attachItems.map((item, idx) => (
-                <TouchableOpacity key={idx} style={s.attachItem} onPress={() => handleAttachAction(item.action)}>
-                  <Text style={{ fontSize: 24 }}>{item.icon}</Text>
-                  <Text style={[s.attachLabel, isDark && { color: '#CCC' }]}>{item.label}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={s.attachItem} onPress={() => setShowAttach(false)}>
-                <X size={24} stroke="#EF4444" />
-                <Text style={[s.attachLabel, { color: '#EF4444' }]}>{lang === 'ar' ? 'إغلاق' : 'Close'}</Text>
-              </TouchableOpacity>
+          <TouchableOpacity style={styles.attachOverlay} activeOpacity={1} onPress={() => setShowAttach(false)}>
+            <Animated.View style={[styles.attachContainer, { backgroundColor: colors.attachBg, transform: [{ translateY: attachAnim.interpolate({ inputRange: [0, 1], outputRange: [400, 0] }) }] }]}>
+              <View style={styles.attachHeader}><Text style={[styles.attachTitle, { color: colors.text }]}>{lang === 'ar' ? 'إرفاق' : 'Attach'}</Text><TouchableOpacity onPress={() => setShowAttach(false)}><X size={22} stroke={colors.subtext} /></TouchableOpacity></View>
+              <View style={styles.attachGrid}>
+                {ATTACH_ITEMS.map((item, idx) => (
+                  <TouchableOpacity key={idx} style={styles.attachItem} onPress={() => handleAttachAction(item.action)}>
+                    <View style={[styles.attachIconWrap, { backgroundColor: item.color + '20' }]}><item.icon size={26} stroke={item.color} /></View>
+                    <Text style={[styles.attachLabel, { color: colors.text }]}>{lang === 'ar' ? item.label_ar : item.label_en}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </Animated.View>
           </TouchableOpacity>
         </Modal>
-
         <Modal visible={featureModal.visible} transparent animationType="fade" onRequestClose={() => setFeatureModal({ visible: false, type: '' })}>
-          <View style={s.featureOverlay}>
-            <View style={[s.featureContainer, isDark && { backgroundColor: '#2A2A2A' }]}>
-              <Text style={[s.featureTitle, isDark && { color: '#FFF' }]}>
-                {featureModal.type === 'search' ? (lang === 'ar' ? 'بحث' : 'Search') :
-                 featureModal.type === 'coach' ? (lang === 'ar' ? 'تدريب' : 'Coaching') :
-                 (lang === 'ar' ? 'تفسير أحلام' : 'Dream Analysis')}
-              </Text>
-              <TextInput
-                style={[s.featureInput, isDark && { backgroundColor: '#333', color: '#FFF', borderColor: '#555' }]}
-                placeholder={lang === 'ar' ? 'اكتب طلبك هنا...' : 'Type your request...'}
-                placeholderTextColor="#999"
-                value={featureInput}
-                onChangeText={setFeatureInput}
-                multiline
-                autoFocus
-              />
-              <TouchableOpacity style={s.featureSendBtn} onPress={handleFeatureSend}>
-                <Text style={s.featureSendText}>{lang === 'ar' ? 'إرسال' : 'Send'}</Text>
-              </TouchableOpacity>
+          <View style={styles.featureOverlay}>
+            <View style={[styles.featureContainer, { backgroundColor: colors.featureBg }]}>
+              <Text style={[styles.featureTitle, { color: colors.text }]}>{featureModal.type === 'search' ? (lang === 'ar' ? 'بحث' : 'Search') : featureModal.type === 'coach' ? (lang === 'ar' ? 'جلسة تدريب' : 'Coaching') : (lang === 'ar' ? 'تفسير حلم' : 'Dream Analysis')}</Text>
+              <TextInput style={[styles.featureInput, { backgroundColor: colors.inputBg, color: colors.text, borderColor: colors.inputBorder }]} placeholder={lang === 'ar' ? 'اكتب طلبك هنا...' : 'Type your request...'} placeholderTextColor={colors.subtext} value={featureInput} onChangeText={setFeatureInput} multiline autoFocus />
+              <View style={styles.featureActions}>
+                <TouchableOpacity style={styles.featureCancelBtn} onPress={() => setFeatureModal({ visible: false, type: '' })}><Text style={{ color: colors.subtext, fontWeight: '600' }}>{lang === 'ar' ? 'إلغاء' : 'Cancel'}</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.featureSendBtn, { backgroundColor: colors.sendActive }]} onPress={handleFeatureSend}><Send size={16} stroke="#FFF" /><Text style={styles.featureSendText}>{lang === 'ar' ? 'إرسال' : 'Send'}</Text></TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -355,41 +299,59 @@ export default function Chat() {
   );
 }
 
-const s = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#F0F0F0' },
-  menuBtn: { padding: 4 },
-  headerName: { fontSize: 15, fontWeight: '700', color: '#1A1A1A', flex: 1, textAlign: 'center' },
-  listContent: { paddingHorizontal: 12, paddingVertical: 12, flexGrow: 1 },
-  welcomeWrap: { alignItems: 'center', paddingTop: 40 },
-  welcomeEmoji: { fontSize: 44, marginBottom: 10 },
-  welcomeText: { fontSize: 16, color: '#1A1A1A', fontWeight: '600', textAlign: 'center', marginBottom: 24, paddingHorizontal: 20 },
-  suggestRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8 },
-  suggestBtn: { backgroundColor: '#F3F0FF', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, borderWidth: 1, borderColor: '#E0D9F5' },
-  suggestText: { color: '#6B21A8', fontSize: 13, fontWeight: '600' },
-  msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10 },
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 8, paddingVertical: 8, borderBottomWidth: 1 },
+  headerBtn: { padding: 8 },
+  headerCenter: { flex: 1, alignItems: 'center' },
+  headerName: { fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  headerActions: { flexDirection: 'row', gap: 4 },
+  listContent: { paddingHorizontal: 10, paddingVertical: 12, flexGrow: 1 },
+  welcomeWrap: { alignItems: 'center', paddingTop: 50, paddingHorizontal: 20 },
+  welcomeEmoji: { fontSize: 56, marginBottom: 16 },
+  welcomeTitle: { fontSize: 22, fontWeight: '700', textAlign: 'center', marginBottom: 6 },
+  welcomeSub: { fontSize: 15, fontWeight: '400', textAlign: 'center', marginBottom: 28 },
+  suggestRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
+  suggestBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 24, borderWidth: 1 },
+  suggestEmoji: { fontSize: 18 },
+  suggestText: { fontSize: 13, fontWeight: '600' },
+  msgRow: { flexDirection: 'row', alignItems: 'flex-end', marginBottom: 10, gap: 6 },
   userRow: { justifyContent: 'flex-end' },
-  twinRow: { justifyContent: 'flex-start', gap: 8 },
-  bubble: { maxWidth: '80%', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 16 },
-  userBubble: { backgroundColor: '#6B21A8', borderBottomRightRadius: 4 },
-  twinBubble: { backgroundColor: 'transparent', borderBottomLeftRadius: 4 },
+  twinRow: { justifyContent: 'flex-start' },
+  avatar: { width: 32, height: 32, borderRadius: 16 },
+  bubble: { maxWidth: '80%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  userBubble: { borderBottomRightRadius: 6 },
+  twinBubble: { borderBottomLeftRadius: 6 },
   userText: { color: '#FFF', fontSize: 15, lineHeight: 22 },
-  twinText: { color: '#1A1A1A', fontSize: 15, lineHeight: 22 },
-  inputBar: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#F0F0F0', gap: 8 },
-  addBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F3F0FF', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E0D9F5' },
-  addBtnText: { fontSize: 18, color: '#6B21A8', fontWeight: '700' },
-  textInput: { flex: 1, backgroundColor: '#F8F8F8', color: '#1A1A1A', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 22, fontSize: 15, maxHeight: 100, minHeight: 44, borderWidth: 1, borderColor: '#EFEFEF' },
+  twinText: { fontSize: 15, lineHeight: 22 },
+  chatImage: { width: 200, height: 200, borderRadius: 12, marginBottom: 6 },
+  msgFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginTop: 4, gap: 6 },
+  timestamp: { fontSize: 10 },
+  retryBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  retryText: { fontSize: 11 },
+  regenerateBtn: { padding: 4 },
+  typingRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 10, paddingVertical: 8, gap: 8 },
+  inputBar: { flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 10, paddingTop: 8, paddingBottom: 10, borderTopWidth: 1, gap: 8 },
+  addBtn: { width: 38, height: 38, borderRadius: 19, justifyContent: 'center', alignItems: 'center', borderWidth: 1 },
+  addBtnText: { fontSize: 20, fontWeight: '600' },
+  textInput: { flex: 1, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, fontSize: 15, maxHeight: 100, minHeight: 42, borderWidth: 1 },
   sendBtn: { width: 42, height: 42, borderRadius: 21, justifyContent: 'center', alignItems: 'center' },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)' },
+  overlay: { flex: 1 },
   sidebar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 300 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'flex-end' },
-  attachMenu: { flexDirection: 'row', backgroundColor: '#FFF', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, justifyContent: 'space-around', flexWrap: 'wrap' },
-  attachItem: { alignItems: 'center', gap: 4 },
-  attachLabel: { fontSize: 12, color: '#666' },
+  attachOverlay: { flex: 1, justifyContent: 'flex-end' },
+  attachContainer: { borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 30 },
+  attachHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  attachTitle: { fontSize: 18, fontWeight: '700' },
+  attachGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  attachItem: { width: (SCREEN_WIDTH - 60) / 3, alignItems: 'center', paddingVertical: 14, borderRadius: 14 },
+  attachIconWrap: { width: 48, height: 48, borderRadius: 14, justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
+  attachLabel: { fontSize: 12, fontWeight: '600', textAlign: 'center' },
   featureOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
-  featureContainer: { width: '85%', backgroundColor: '#FFF', borderRadius: 16, padding: 20, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 10, elevation: 8 },
-  featureTitle: { fontSize: 18, fontWeight: '700', color: '#1A1A1A' },
-  featureInput: { backgroundColor: '#F8F8F8', borderRadius: 12, padding: 14, fontSize: 15, minHeight: 80, textAlignVertical: 'top', marginBottom: 12, borderWidth: 1, borderColor: '#EFEFEF' },
-  featureSendBtn: { backgroundColor: '#6B21A8', padding: 14, borderRadius: 12, alignItems: 'center' },
-  featureSendText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  featureContainer: { width: '88%', borderRadius: 20, padding: 20 },
+  featureTitle: { fontSize: 18, fontWeight: '700', marginBottom: 14 },
+  featureInput: { borderRadius: 14, padding: 14, fontSize: 15, minHeight: 80, textAlignVertical: 'top', marginBottom: 14, borderWidth: 1 },
+  featureActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  featureCancelBtn: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
+  featureSendBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10 },
+  featureSendText: { color: '#FFF', fontWeight: '700', fontSize: 15 },
 });
