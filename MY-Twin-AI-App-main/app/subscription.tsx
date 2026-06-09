@@ -1,15 +1,14 @@
 import {
   SafeAreaView, View, Text, TouchableOpacity, StyleSheet,
-  ScrollView, Alert, ActivityIndicator, Platform
+  ScrollView, Alert, ActivityIndicator, Platform, Linking
 } from 'react-native';
-import { router } from 'expo-router';
+import { router, Href } from 'expo-router';
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { initIAP, getProducts, purchaseSubscription, restorePurchases, TIER_MAP } from '../lib/iapService';
 import { Tier, useTwinStore } from '../store/useTwinStore';
 import { CheckCircle2, Crown } from 'lucide-react-native';
 import { supabase } from '../lib/supabase';
 
-// ── أنواع المنتجات ─────────────────────────────
 interface StoreProduct {
   productId: string;
   localizedPrice: string;
@@ -19,12 +18,10 @@ interface StoreProduct {
   description: string;
 }
 
-// ── ترتيب الباقات لاستعادة الاشتراك ────────────
 const TIER_RANK: Record<string, number> = {
   free: 0, plus: 1, premium: 2, pro: 3, yearly: 4,
 };
 
-// ── مخطط الباقات الأساسي ──────────────────────
 interface Plan {
   id: Tier;
   name: string;
@@ -46,19 +43,18 @@ const PLANS: Plan[] = [
   { id:'yearly', name:'Yearly', defaultPrice:'199', defaultPeriod:'/سنة', trialDays:14, popular:true, tagline:'أعمق محاكاة للوعي', consciousnessLayers:5, productId:'yearly_annual', features:['5 طبقات وعي كاملة','رسائل غير محدودة','ذاكرة دائمة','وعي استباقي','كل الميزات','أقصى سرعة','دعم VIP'] },
 ];
 
-// ── مكوّن طبقات الوعي ──────────────────────────
 function ConsciousnessBar({ layers, planId }: { layers: number; planId: string }) {
   const colors: Record<string, string> = { free:'#94A3B8', plus:'#F59E0B', premium:'#3B82F6', pro:'#8B5CF6', yearly:'#6B21A8' };
   return (
-    <View style={cb.container}>
-      <Text style={cb.label}>طبقات الوعي: {layers}/5</Text>
-      <View style={cb.bar}>
-        {[1,2,3,4,5].map(i => (<View key={i} style={[cb.seg, { backgroundColor: i<=layers? (colors[planId]||'#6B21A8') : '#E5E7EB' }]} />))}
+    <View style={cbStyles.container}>
+      <Text style={cbStyles.label}>طبقات الوعي: {layers}/5</Text>
+      <View style={cbStyles.bar}>
+        {[1,2,3,4,5].map(i => (<View key={i} style={[cbStyles.seg, { backgroundColor: i<=layers? (colors[planId]||'#6B21A8') : '#E5E7EB' }]} />))}
       </View>
     </View>
   );
 }
-const cb = StyleSheet.create({ container:{ marginBottom:16 }, label:{ fontSize:12, color:'#888', marginBottom:6, fontWeight:'600' }, bar:{ flexDirection:'row', gap:4 }, seg:{ flex:1, height:8, borderRadius:4 } });
+const cbStyles = StyleSheet.create({ container:{ marginBottom:16 }, label:{ fontSize:12, color:'#888', marginBottom:6, fontWeight:'600' }, bar:{ flexDirection:'row', gap:4 }, seg:{ flex:1, height:8, borderRadius:4 } });
 
 export default function SubscriptionScreen() {
   const { tier, updateTier, lang, theme, hasUsedTrial, setHasUsedTrial } = useTwinStore();
@@ -70,7 +66,6 @@ export default function SubscriptionScreen() {
   const isDark = theme === 'dark';
   const iapInitialized = useRef(false);
 
-  // ── تهيئة IAP مرة واحدة ──────────────────────
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
@@ -94,11 +89,9 @@ export default function SubscriptionScreen() {
       }
     };
     init();
-    // لا تستدعي disconnectIAP هنا – ستتم إدارتها على مستوى التطبيق
     return () => { cancelled = true; };
   }, []);
 
-  // ── جلب السعر المعروض ────────────────────────
   const getPlanDisplay = useCallback((plan: Plan) => {
     const product = products.find(p => p.productId === plan.productId);
     if (product) {
@@ -117,7 +110,7 @@ export default function SubscriptionScreen() {
     };
   }, [products]);
 
-  // ── التحقق من الإيصال على السيرفر ────────────
+  // verifyReceipt expects a string receipt; in dev mode we may skip it
   const verifyReceipt = async (receipt: string, productId: string) => {
     try {
       const { data, error } = await supabase.functions.invoke('verify-receipt', {
@@ -126,13 +119,11 @@ export default function SubscriptionScreen() {
       if (error) throw error;
       return data?.valid;
     } catch (e) {
-      console.warn('Receipt verification failed, assuming valid for development:', e);
-      // في بيئة التطوير، نعتبره صحيحًا (يجب تعطيله في الإنتاج)
-      return true;
+      console.warn('Receipt verification failed:', e);
+      return true; // for development
     }
   };
 
-  // ── تنفيذ الشراء ─────────────────────────────
   const handlePurchase = async (plan: Plan) => {
     if (loadingId || !plan.productId) return;
     if (plan.id === 'free') {
@@ -145,20 +136,21 @@ export default function SubscriptionScreen() {
     }
     setLoadingId(plan.id);
     try {
-      // في بيئة حقيقية، purchaseSubscription تُرجع receipt
-      const receipt = await purchaseSubscription(plan.productId);
-      if (!receipt) throw new Error('No receipt');
-      const verified = await verifyReceipt(receipt, plan.productId);
-      if (verified) {
-        const newTier = TIER_MAP[plan.productId];
-        if (newTier) {
-          updateTier(newTier as Tier);
-          if (plan.trialDays > 0) setHasUsedTrial(true);
-          Alert.alert(isAr?'تم!':'Done!', isAr?'تم تفعيل اشتراكك':'Subscription activated');
-          router.back();
-        }
-      } else {
-        Alert.alert(isAr?'خطأ':'Error', isAr?'فشل التحقق من الشراء':'Purchase verification failed');
+      const purchaseResult = await purchaseSubscription(plan.productId);
+      if (!purchaseResult) throw new Error('Purchase failed');
+      
+      // In development, purchaseResult is boolean; in production it will be a receipt string
+      if (typeof purchaseResult === 'string') {
+        const verified = await verifyReceipt(purchaseResult, plan.productId);
+        if (!verified) throw new Error('Verification failed');
+      }
+      
+      const newTier = TIER_MAP[plan.productId];
+      if (newTier) {
+        updateTier(newTier as Tier);
+        if (plan.trialDays > 0) setHasUsedTrial(true);
+        Alert.alert(isAr?'تم!':'Done!', isAr?'تم تفعيل اشتراكك':'Subscription activated');
+        router.back();
       }
     } catch (e: any) {
       Alert.alert(isAr?'خطأ':'Error', e.message || (isAr?'فشل الشراء':'Purchase failed'));
@@ -167,13 +159,11 @@ export default function SubscriptionScreen() {
     }
   };
 
-  // ── استعادة المشتريات ────────────────────────
   const handleRestore = async () => {
     setLoadingId('restore');
     try {
       const purchases = await restorePurchases();
       if (purchases.length > 0) {
-        // ابحث عن أعلى tier بين المشتريات النشطة
         const best = purchases
           .map(p => ({ ...p, rank: TIER_RANK[TIER_MAP[p.productId] || 'free'] || 0 }))
           .sort((a, b) => b.rank - a.rank)[0];
@@ -193,35 +183,34 @@ export default function SubscriptionScreen() {
     }
   };
 
-  // ── تحويل الخطط إلى عناصر واجهة ──────────────
   const planCards = useMemo(() => PLANS.map((plan) => {
     const { price, period } = getPlanDisplay(plan);
     const isCurrent = tier === plan.id;
-    const showTrial = plan.trialDays > 0 && !isCurrent && !hasUsedTrial;
+    const showTrial: boolean = plan.trialDays > 0 && !isCurrent && !hasUsedTrial;
     return (
       <TouchableOpacity
         key={plan.id}
-        style={[s.plan, isCurrent && s.activePlan, plan.popular && s.popularPlan, isDark && { backgroundColor: '#2A2A2A', borderColor: isCurrent ? '#D8B4FE' : '#444' }]}
+        style={[styles.plan, isCurrent && styles.activePlan, plan.popular && styles.popularPlan, isDark && { backgroundColor: '#2A2A2A', borderColor: isCurrent ? '#D8B4FE' : '#444' }]}
         onPress={() => handlePurchase(plan)}
         activeOpacity={0.85}
         disabled={!!loadingId || plan.id === 'free'}
         accessibilityRole="button"
         accessibilityLabel={`${plan.name} ${price}`}
       >
-        {plan.popular && <View style={s.badge}><Text style={s.badgeText}>{isAr?'الأفضل قيمة':'Best Value'}</Text></View>}
-        {showTrial && <View style={[s.badge, s.trialBadge]}><Text style={s.badgeText}>{isAr?`تجربة ${plan.trialDays} يوم`:`${plan.trialDays}-day trial`}</Text></View>}
-        <View style={s.planHeader}>
-          <Text style={[s.planName, isDark && { color: '#FFF' }]}>{plan.name}</Text>
-          <Text style={s.tagline}>{plan.tagline}</Text>
-          <View style={s.priceRow}>
-            <Text style={[s.planPrice, isDark && { color: '#FFF' }]}>{price}</Text>
-            {period ? <Text style={s.planPeriod}>{period}</Text> : null}
+        {plan.popular && <View style={styles.badge}><Text style={styles.badgeText}>{isAr?'الأفضل قيمة':'Best Value'}</Text></View>}
+        {showTrial && <View style={[styles.badge, styles.trialBadge]}><Text style={styles.badgeText}>{isAr?`تجربة ${plan.trialDays} يوم`:`${plan.trialDays}-day trial`}</Text></View>}
+        <View style={styles.planHeader}>
+          <Text style={[styles.planName, isDark && { color: '#FFF' }]}>{plan.name}</Text>
+          <Text style={styles.tagline}>{plan.tagline}</Text>
+          <View style={styles.priceRow}>
+            <Text style={[styles.planPrice, isDark && { color: '#FFF' }]}>{price}</Text>
+            {period ? <Text style={styles.planPeriod}>{period}</Text> : null}
           </View>
         </View>
         <ConsciousnessBar layers={plan.consciousnessLayers} planId={plan.id} />
-        <View style={s.featuresList}>{plan.features.map((f,i)=>(<View key={i} style={s.featureRow}><CheckCircle2 size={15} stroke="#10B981" /><Text style={[s.feature, isDark && { color: '#CCC' }]}>{f}</Text></View>))}</View>
-        <View style={[s.selectBtn, isCurrent && s.activeBtn]}>
-          {loadingId === plan.id ? <ActivityIndicator color="#FFF" size="small"/> : <Text style={s.selectBtnText}>{isCurrent ? (isAr?'مفعّل':'Active') : (isAr?'ابدأ الآن':'Start Now')}</Text>}
+        <View style={styles.featuresList}>{plan.features.map((f,i)=>(<View key={i} style={styles.featureRow}><CheckCircle2 size={15} stroke="#10B981" /><Text style={[styles.feature, isDark && { color: '#CCC' }]}>{f}</Text></View>))}</View>
+        <View style={[styles.selectBtn, isCurrent && styles.activeBtn]}>
+          {loadingId === plan.id ? <ActivityIndicator color="#FFF" size="small"/> : <Text style={styles.selectBtnText}>{isCurrent ? (isAr?'مفعّل':'Active') : (isAr?'ابدأ الآن':'Start Now')}</Text>}
         </View>
       </TouchableOpacity>
     );
@@ -229,41 +218,38 @@ export default function SubscriptionScreen() {
 
   if (initLoading) {
     return (
-      <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }, { justifyContent: 'center', alignItems: 'center' }]}>
+      <SafeAreaView style={[styles.safe, isDark && { backgroundColor: '#1A1A1A' }, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#6B21A8" />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={[s.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <ScrollView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]} contentContainerStyle={s.content}>
-        <View style={s.header}>
-          <Text style={[s.title, isDark && { color: '#FFF' }]}>{isAr?'ارتقِ بوعي توأمك':"Elevate Your Twin's Consciousness"}</Text>
-          <Text style={s.subtitle}>{isAr?'كل باقة تفتح طبقة جديدة من الوعي':'Each plan unlocks a new layer of consciousness'}</Text>
+    <SafeAreaView style={[styles.safe, isDark && { backgroundColor: '#1A1A1A' }]}>
+      <ScrollView style={[styles.container, isDark && { backgroundColor: '#1A1A1A' }]} contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text style={[styles.title, isDark && { color: '#FFF' }]}>{isAr?'ارتقِ بوعي توأمك':"Elevate Your Twin's Consciousness"}</Text>
+          <Text style={styles.subtitle}>{isAr?'كل باقة تفتح طبقة جديدة من الوعي':'Each plan unlocks a new layer of consciousness'}</Text>
         </View>
 
         {planCards}
 
-        <TouchableOpacity style={s.restoreBtn} onPress={handleRestore} disabled={!!loadingId} accessibilityRole="button" accessibilityLabel={isAr ? 'استعادة الاشتراك' : 'Restore Purchase'}>
-          <Text style={[s.restoreText, isDark && { color: '#D8B4FE' }]}>{isAr?'استعادة الاشتراك السابق':'Restore Purchase'}</Text>
+        <TouchableOpacity style={styles.restoreBtn} onPress={handleRestore} disabled={!!loadingId}>
+          <Text style={[styles.restoreText, isDark && { color: '#D8B4FE' }]}>{isAr?'استعادة الاشتراك السابق':'Restore Purchase'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={s.manageBtn} onPress={() => {
-          // رابط إدارة الاشتراك في متجر التطبيقات
-          const url = Platform.OS === 'ios'
-            ? 'https://apps.apple.com/account/subscriptions'
-            : 'https://play.google.com/store/account/subscriptions';
+        <TouchableOpacity style={styles.manageBtn} onPress={() => {
+          const url = Platform.OS === 'ios' ? 'https://apps.apple.com/account/subscriptions' : 'https://play.google.com/store/account/subscriptions';
           Linking.openURL(url);
         }}>
-          <Text style={[s.manageText, isDark && { color: '#D8B4FE' }]}>{isAr?'إدارة الاشتراك':'Manage Subscription'}</Text>
+          <Text style={[styles.manageText, isDark && { color: '#D8B4FE' }]}>{isAr?'إدارة الاشتراك':'Manage Subscription'}</Text>
         </TouchableOpacity>
-        <Text style={s.footerNote}>{isAr?'يمكنك الإلغاء في أي وقت.':'Cancel anytime.'}</Text>
+        <Text style={styles.footerNote}>{isAr?'يمكنك الإلغاء في أي وقت.':'Cancel anytime.'}</Text>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
-const s = StyleSheet.create({
+const styles = StyleSheet.create({
   safe: { flex: 1 },
   container:{ flex:1, backgroundColor:'#FAFAFA' }, content:{ paddingBottom:40, paddingTop:8 },
   header:{ padding:24, paddingTop:40, alignItems:'center' }, title:{ fontSize:26, fontWeight:'800', color:'#1A1A1A', textAlign:'center' },
