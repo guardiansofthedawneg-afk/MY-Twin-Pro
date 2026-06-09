@@ -350,3 +350,13 @@ async def proactive_check(uid: str = Depends(get_user)):
     except Exception as e:
         logger.error(f"Proactive check error: {e}")
         return {"error": "unavailable"}
+
+# ========== Product Recommender Click Tracking ==========
+@app.post("/api/product/click")
+async def product_click(body: dict, uid: str = Depends(get_user)):
+    product_id = body.get("product_id")
+    if not product_id:
+        raise HTTPException(400, "missing_product_id")
+    from product_recommender import product_recommender
+    success = product_recommender.log_click(uid, product_id)
+    return {"success": success}
