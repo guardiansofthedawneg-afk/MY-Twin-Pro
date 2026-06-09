@@ -1,23 +1,27 @@
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useRef } from "react";
-import { TouchableOpacity, StyleSheet, Animated, Modal, View, Pressable, useWindowDimensions } from "react-native";
+import { Pressable, StyleSheet, Animated, Modal, useWindowDimensions } from "react-native";
 import { useTwinStore } from "../store/useTwinStore";
 import { initAnalytics } from "../lib/analytics";
-import CustomDrawerContent from "../components/CustomDrawerContent";
+import SideMenu from "../components/SideMenu";
 import { ToastProvider } from "../components/Toast";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
-const SideMenu = () => {
-  const { menuVisible, closeMenu, theme } = useTwinStore((s) => ({
+export default function Layout() {
+  const { theme, menuVisible, closeMenu } = useTwinStore((s) => ({
+    theme: s.theme,
     menuVisible: s.menuVisible,
     closeMenu: s.closeMenu,
-    theme: s.theme,
   }));
   const isDark = theme === 'dark';
   const slideAnim = useRef(new Animated.Value(-300)).current;
   const { width } = useWindowDimensions();
   const drawerWidth = width * 0.8;
+
+  useEffect(() => {
+    initAnalytics();
+  }, []);
 
   useEffect(() => {
     Animated.timing(slideAnim, {
@@ -26,31 +30,6 @@ const SideMenu = () => {
       useNativeDriver: true,
     }).start();
   }, [menuVisible, drawerWidth]);
-
-  // Keep component mounted to allow exit animation
-  if (!menuVisible && slideAnim._value === -drawerWidth) return null;
-
-  return (
-    <Modal visible={true} transparent animationType="none" onRequestClose={closeMenu}>
-      <Pressable style={styles.overlay} onPress={closeMenu}>
-        <Animated.View style={[styles.sidebar, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF', width: drawerWidth, transform: [{ translateX: slideAnim }] }]}>
-          <CustomDrawerContent onClose={closeMenu} />
-        </Animated.View>
-      </Pressable>
-    </Modal>
-  );
-};
-
-export default function Layout() {
-  const { theme, menuVisible } = useTwinStore((s) => ({
-    theme: s.theme,
-    menuVisible: s.menuVisible,
-  }));
-  const isDark = theme === 'dark';
-
-  useEffect(() => {
-    initAnalytics();
-  }, []);
 
   return (
     <ErrorBoundary>
@@ -83,7 +62,15 @@ export default function Layout() {
           <Stack.Screen name="about" />
           <Stack.Screen name="referral" />
         </Stack>
-        {menuVisible && <SideMenu />}
+        {menuVisible && (
+          <Modal visible transparent animationType="none" onRequestClose={closeMenu}>
+            <Pressable style={styles.overlay} onPress={closeMenu}>
+              <Animated.View style={[styles.sidebar, { backgroundColor: isDark ? '#1A1A1A' : '#FFFFFF', width: drawerWidth, transform: [{ translateX: slideAnim }] }]}>
+                <SideMenu onClose={closeMenu} />
+              </Animated.View>
+            </Pressable>
+          </Modal>
+        )}
       </ToastProvider>
     </ErrorBoundary>
   );
