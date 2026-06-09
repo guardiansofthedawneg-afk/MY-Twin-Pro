@@ -1,249 +1,301 @@
-import { SafeAreaView, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Alert, TextInput, Animated, Image } from 'react-native';
-import { router } from 'expo-router';
+import {
+  SafeAreaView, View, Text, TouchableOpacity, StyleSheet,
+  ScrollView, Animated, Alert, ActivityIndicator, TextInput
+} from 'react-native';
 import { useState, useRef, useEffect } from 'react';
+import { router } from 'expo-router';
+import { useTwinStore } from '../store/useTwinStore';
 import { supabase } from '../lib/supabase';
-import { API } from '../lib/api';
-import { useTwinStore, type TwinGender } from '../store/useTwinStore';
-import { Brain, ArrowRight, User, Sparkles, Heart, MessageCircle } from 'lucide-react-native';
+import {
+  Sparkles, ArrowRight, ArrowLeft, Check, Brain, Heart, Users,
+  Target, Coffee, Star, MessageCircle
+} from 'lucide-react-native';
 
+// ── الأسئلة ─────────────────────────────────────
 const QUESTIONS = {
   ar: [
-    { id: 1, q: 'عندما تواجه مشكلة صعبة، كيف تتصرف عادةً؟', o: ['أحللها بهدوء', 'أثق بحدسي', 'أطلب المساعدة', 'أتجنبها مؤقتاً'] },
-    { id: 2, q: 'ما هو أكثر شيء يمنحك الطاقة والإيجابية؟', o: ['تحقيق إنجاز', 'قضاء وقت مع الأحباء', 'اكتشاف شيء جديد', 'الراحة والاسترخاء'] },
-    { id: 3, q: 'كيف تصف علاقاتك مع الأشخاص المقربين منك؟', o: ['مستقرة وداعمة', 'أحياناً أقلق من فقدانهم', 'أستمتع بها لكن أحتاج مساحتي', 'أفضل الاعتماد على نفسي'] },
-    { id: 4, q: 'عندما تشعر بالحزن أو الضيق، ما هو أول شيء تفعله؟', o: ['أتحدث مع أحدهم', 'أبقى وحدي لأفكر', 'أشغل نفسي بشيء آخر', 'أبحث عن حل مباشر'] },
-    { id: 5, q: 'ما هو أكبر حلم أو طموح تسعى لتحقيقه؟', o: ['النجاح المهني', 'السعادة العائلية', 'التأثير في العالم', 'تحقيق السلام الداخلي'] },
-    { id: 6, q: 'كيف تفضل أن تقضي يومك المثالي؟', o: ['منجزاً ومليئاً بالمهام', 'مع العائلة والأصدقاء', 'أتعلم أو أقرأ شيئاً جديداً', 'في الطبيعة أو أسترخي'] },
-    { id: 7, q: 'ما هي الصفة التي تقدرها أكثر في الآخرين؟', o: ['الصدق والوفاء', 'الذكاء والدهاء', 'اللطف والتعاطف', 'القوة والاستقلالية'] },
+    { id:'1', q:'عندما تواجه مشكلة كبيرة، كيف تتعامل معها عادةً؟', options:['أحللها بهدوء','أثق بحدسي','أطلب المساعدة','أتجنبها مؤقتاً'] },
+    { id:'2', q:'ما هو أكثر شيء يدفعك للاستمرار في الحياة؟', options:['تحقيق إنجاز','قضاء وقت مع الأحباء','النجاح المهني','تحقيق السلام الداخلي'] },
+    { id:'3', q:'أي نوع من العلاقات تشعر أنه الأقرب لقلبك؟', options:['مستقرة وداعمة','مليئة بالمغامرات','مع العائلة والأصدقاء','أفضل الاعتماد على نفسي'] },
+    { id:'4', q:'كيف تصف يومك المثالي؟', options:['منجزاً ومليئاً بالمهام','في الطبيعة أو أسترخي','مع العائلة والأصدقاء','أستمتع بها لكن أحتاج مساحتي'] },
+    { id:'5', q:'ما هو أكبر خوف يراودك أحياناً؟', options:['الفشل في تحقيق أهدافي','أحياناً أقلق من فقدانهم','عدم تحقيق تأثير في العالم','أخشى فقدان استقلاليتي'] },
+    { id:'6', q:'عندما تشعر بالضغط، ما هو أول شيء تفعله؟', options:['أبحث عن حل مباشر','أتحدث مع أحدهم','أشغل نفسي بشيء آخر','أبقى وحدي لأفكر'] },
+    { id:'7', q:'ما هي القيمة الأكثر أهمية بالنسبة لك؟', options:['الذكاء والدهاء','السعادة العائلية','التأثير في العالم','الحرية الشخصية'] },
   ],
   en: [
-    { id: 1, q: 'When you face a difficult problem, how do you usually react?', o: ['Analyze it calmly', 'Trust my intuition', 'Ask for help', 'Avoid it temporarily'] },
-    { id: 2, q: 'What gives you the most energy and positivity?', o: ['Achieving a goal', 'Spending time with loved ones', 'Discovering something new', 'Rest and relaxation'] },
-    { id: 3, q: 'How would you describe your relationships with close ones?', o: ['Stable and supportive', 'Sometimes I worry about losing them', 'I enjoy them but need my space', 'I prefer to rely on myself'] },
-    { id: 4, q: 'When you feel sad or upset, what is the first thing you do?', o: ['Talk to someone', 'Stay alone to think', 'Distract myself with something else', 'Look for a direct solution'] },
-    { id: 5, q: 'What is your biggest dream or ambition?', o: ['Professional success', 'Family happiness', 'Making an impact on the world', 'Achieving inner peace'] },
-    { id: 6, q: 'How do you prefer to spend your perfect day?', o: ['Productive and full of tasks', 'With family and friends', 'Learning or reading something new', 'In nature or relaxing'] },
-    { id: 7, q: 'What quality do you value most in others?', o: ['Honesty and loyalty', 'Intelligence and cleverness', 'Kindness and empathy', 'Strength and independence'] },
+    { id:'1', q:'When facing a big problem, how do you usually handle it?', options:['Analyze it calmly','Trust my intuition','Ask for help','Avoid it temporarily'] },
+    { id:'2', q:'What drives you most to keep going in life?', options:['Achieving a goal','Spending time with loved ones','Professional success','Achieving inner peace'] },
+    { id:'3', q:'Which type of relationship feels closest to your heart?', options:['Stable and supportive','Full of adventures','With family and friends','I prefer to rely on myself'] },
+    { id:'4', q:'How would you describe your perfect day?', options:['Productive and full of tasks','In nature or relaxing','With family and friends','I enjoy them but need my space'] },
+    { id:'5', q:'What is your biggest fear sometimes?', options:['Failure to achieve my goals','Sometimes I worry about losing them','Not making an impact on the world','Losing my independence'] },
+    { id:'6', q:'When you feel stressed, what is the first thing you do?', options:['Look for a direct solution','Talk to someone','Distract myself with something else','Stay alone to think'] },
+    { id:'7', q:'What is the most important value to you?', options:['Intelligence and cleverness','Family happiness','Making an impact on the world','Personal freedom'] },
   ],
 };
 
+// ─ـ مصفوفة تحليل الإجابات لكل سمة ──────────────
+const TRAIT_MAP: Record<string, Record<string, string[]>> = {
+  ar: {
+    analytical: ['أحللها بهدوء','منجزاً ومليئاً بالمهام','أبحث عن حل مباشر','الذكاء والدهاء'],
+    emotional: ['أثق بحدسي','قضاء وقت مع الأحباء','أحياناً أقلق من فقدانهم','أتحدث مع أحدهم','السعادة العائلية'],
+    social: ['أطلب المساعدة','مستقرة وداعمة','مع العائلة والأصدقاء','أستمتع بها لكن أحتاج مساحتي','التأثير في العالم'],
+    independent: ['أتجنبها مؤقتاً','أفضل الاعتماد على نفسي','أبقى وحدي لأفكر','أشغل نفسي بشيء آخر','تحقيق السلام الداخلي','الحرية الشخصية'],
+    ambitious: ['تحقيق إنجاز','النجاح المهني','منجزاً ومليئاً بالمهام','أبحث عن حل مباشر'],
+    calm: ['أشغل نفسي بشيء آخر','في الطبيعة أو أسترخي','الراحة والاسترخاء'],
+  },
+  en: {
+    analytical: ['Analyze it calmly','Productive and full of tasks','Look for a direct solution','Intelligence and cleverness'],
+    emotional: ['Trust my intuition','Spending time with loved ones','Sometimes I worry about losing them','Talk to someone','Family happiness'],
+    social: ['Ask for help','Stable and supportive','With family and friends','I enjoy them but need my space','Making an impact on the world'],
+    independent: ['Avoid it temporarily','I prefer to rely on myself','Stay alone to think','Distract myself with something else','Achieving inner peace','Personal freedom'],
+    ambitious: ['Achieving a goal','Professional success','Productive and full of tasks','Look for a direct solution'],
+    calm: ['Distract myself with something else','In nature or relaxing','Rest and relaxation'],
+  },
+};
+
+// ─ـ تحليل الشخصية من جميع الإجابات ─────────────
 function analyzePersonality(answers: Record<string, string>, lang: string) {
-  const traits: Record<string, number> = { analytical: 0, emotional: 0, social: 0, independent: 0, ambitious: 0, calm: 0 };
+  const traits: Record<string, number> = {
+    analytical:0, emotional:0, social:0, independent:0, ambitious:0, calm:0,
+  };
+  const map = TRAIT_MAP[lang] || TRAIT_MAP['ar'];
+  Object.values(answers).forEach(ans => {
+    for (const [trait, options] of Object.entries(map)) {
+      if (options.includes(ans)) traits[trait] += 2;
+    }
+  });
+  const sorted = Object.entries(traits).sort((a,b) => b[1] - a[1]);
+  return {
+    traits,
+    dominant: sorted[0][0],
+    secondary: sorted[1][0],
+  };
+}
+
+// ─ـ وصف السمات بالعربية والإنجليزية ────────────
+const TRAIT_DESC: Record<string, { ar: string; en: string }> = {
+  analytical: { ar:'تحليلي', en:'analytical' },
+  emotional: { ar:'عاطفي', en:'emotional' },
+  social: { ar:'اجتماعي', en:'social' },
+  independent: { ar:'مستقل', en:'independent' },
+  ambitious: { ar:'طموح', en:'ambitious' },
+  calm: { ar:'هادئ', en:'calm' },
+};
+
+// ─ـ رسالة ترحيب مخصصة ──────────────────────────
+function generateWelcomeMessage(
+  analysis: ReturnType<typeof analyzePersonality>,
+  twinName: string,
+  userName: string,
+  lang: string
+): string {
+  const d = analysis.dominant;
+  const s = analysis.secondary;
   if (lang === 'ar') {
-    if (answers['1'] === 'أحللها بهدوء') traits.analytical += 2;
-    if (answers['2'] === 'تحقيق إنجاز') traits.ambitious += 2;
-    if (answers['3'] === 'مستقرة وداعمة') traits.social += 2;
-  } else {
-    if (answers['1'] === 'Analyze it calmly') traits.analytical += 2;
-    if (answers['2'] === 'Achieving a goal') traits.ambitious += 2;
-    if (answers['3'] === 'Stable and supportive') traits.social += 2;
+    return `مرحباً ${userName}! 🎯
+
+أنا ${twinName}، وقد حللت إجاباتك بعمق.
+
+**طابعك الأساسي: ${TRAIT_DESC[d].ar}**
+**الثانوي: ${TRAIT_DESC[s].ar}**
+
+هذا يعني أنك شخص ${TRAIT_DESC[d].ar} بطبعك، وفي نفس الوقت تملك جانباً ${TRAIT_DESC[s].ar} قوياً.
+
+أنا هنا لأساعدك في رحلتك. اسألني أي شيء — عن أهدافك، مشاعرك، أو حتى مجرد التحدث. 💜`;
   }
-  const dominant = Object.entries(traits).sort((a, b) => b[1] - a[1])[0][0];
-  return { traits, dominant_type: dominant.toUpperCase() };
+  return `Welcome ${userName}! 🎯
+
+I'm ${twinName}, and I've analyzed your answers deeply.
+
+**Your primary trait: ${TRAIT_DESC[d].en}**
+**Secondary: ${TRAIT_DESC[s].en}**
+
+This means you're naturally ${TRAIT_DESC[d].en}, with a strong ${TRAIT_DESC[s].en} side.
+
+I'm here to help you on your journey. Ask me anything — goals, feelings, or just to talk. 💜`;
 }
 
 export default function Onboarding() {
-  const [step, setStep] = useState(1);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [questionStep, setQuestionStep] = useState(0);
-  const [freeInfo, setFreeInfo] = useState('');
-  const [twinGender, setTwinGender] = useState<TwinGender>('female');
-  const [userName, setUserName] = useState('');
-  const [twinName, setTwinName] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { userId, lang, theme, setTwinName: storeSetTwinName, setTwinGender: storeSetTwinGender } = useTwinStore();
+  const {
+    userId, twinName, twinGender, setTwinName, setTwinGender,
+    addMessage, lang, theme
+  } = useTwinStore();
+
   const isAr = lang === 'ar';
   const isDark = theme === 'dark';
-  const questions = QUESTIONS[lang] || QUESTIONS['ar'];
-  const floatAnim = useRef(new Animated.Value(0)).current;
+  const questions = QUESTIONS[lang as keyof typeof QUESTIONS] || QUESTIONS['ar'];
+
+  const [step, setStep] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [userName, setUserName] = useState('');
+  const [freeInfo, setFreeInfo] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<ReturnType<typeof analyzePersonality> | null>(null);
+
+  const fadeAnim = useRef(new Animated.Value(1)).current;
   const pulseAnim = useRef(new Animated.Value(1)).current;
 
+  // تأثيرات
   useEffect(() => {
-    Animated.loop(Animated.sequence([
-      Animated.timing(floatAnim, { toValue: 1, duration: 2000, useNativeDriver: true }),
-      Animated.timing(floatAnim, { toValue: 0, duration: 2000, useNativeDriver: true }),
-    ])).start();
-    Animated.loop(Animated.sequence([
-      Animated.timing(pulseAnim, { toValue: 1.15, duration: 1200, useNativeDriver: true }),
-      Animated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
-    ])).start();
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue:1.05, duration:800, useNativeDriver:true }),
+        Animated.timing(pulseAnim, { toValue:1, duration:800, useNativeDriver:true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
   }, []);
 
-  const translateY = floatAnim.interpolate({ inputRange: [0, 1], outputRange: [0, -12] });
-  const scale = pulseAnim;
-
-  const pickAnswer = (answer: string) => {
-    setAnswers({ ...answers, [questionStep + 1]: answer });
-    if (questionStep < questions.length - 1) setQuestionStep(questionStep + 1);
-    else setStep(2);
+  const animateTransition = (cb: () => void) => {
+    Animated.timing(fadeAnim, { toValue:0, duration:150, useNativeDriver:true }).start(() => {
+      cb();
+      Animated.timing(fadeAnim, { toValue:1, duration:150, useNativeDriver:true }).start();
+    });
   };
 
+  const handleAnswer = (qId: string, opt: string) => {
+    setAnswers(prev => ({ ...prev, [qId]: opt }));
+    if (step < questions.length - 1) {
+      animateTransition(() => setStep(prev => prev + 1));
+    }
+  };
+
+  const handleBack = () => {
+    if (step > 0) animateTransition(() => setStep(prev => prev - 1));
+  };
+
+  const isLastQuestion = step === questions.length - 1;
+  const allAnswered = Object.keys(answers).length === questions.length;
+
   const handleFinalSubmit = async () => {
-    if (!userName || !twinName) { Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'يرجى ملء جميع الحقول' : 'Please fill all fields'); return; }
+    if (!userId) {
+      Alert.alert('خطأ', 'يجب تسجيل الدخول أولاً');
+      return;
+    }
+    if (!allAnswered) {
+      Alert.alert(isAr?'تنبيه':'Notice', isAr?'أجب على جميع الأسئلة أولاً':'Please answer all questions first');
+      return;
+    }
     setLoading(true);
     try {
       const analysis = analyzePersonality(answers, lang);
-      storeSetTwinName(twinName);
-      storeSetTwinGender(twinGender);
-      
-      await supabase.from('profiles').upsert({ id: userId, twin_name: twinName, twin_gender: twinGender, full_name: userName, onboarded: true });
-      setStep(6);
-    } catch { Alert.alert(isAr ? 'خطأ' : 'Error', isAr ? 'لم نتمكن من حفظ بياناتك' : 'Could not save your data'); }
-    finally { setLoading(false); }
+      setAnalysisResult(analysis);
+
+      // حفظ البروفايل والتحليل في Supabase
+      await supabase.from('profiles').upsert({
+        id: userId,
+        twin_name: twinName,
+        twin_gender: twinGender,
+        full_name: userName || (isAr?'صديقي':'Friend'),
+        onboarded: true,
+        personality_analysis: JSON.stringify(analysis),
+        free_info: freeInfo,
+      });
+
+      // توليد رسالة ترحيب وإضافتها للدردشة
+      const welcomeMsg = generateWelcomeMessage(analysis, twinName, userName || (isAr?'صديقي':'Friend'), lang);
+      addMessage('twin', welcomeMsg);
+
+      router.replace('/chat');
+    } catch (e: any) {
+      Alert.alert('خطأ', e.message || 'فشل الحفظ');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const skip = () => setStep(6);
-
-  if (loading) return (
-    <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <ActivityIndicator size="large" color="#6B21A8" />
-      <Text style={[s.loadingText, isDark && { color: '#FFF' }]}>{isAr ? 'جاري إعداد توأمك...' : 'Preparing your twin...'}</Text>
-    </SafeAreaView>
-  );
-
-  if (step === 6) {
-    const analysis = analyzePersonality(answers, lang);
-    const userLabel = twinGender === 'female' ? (isAr ? 'صديقتي' : 'my friend') : (isAr ? 'صديقي' : 'my friend');
-    const twinLabel = twinGender === 'female' ? (isAr ? 'رفيقتك' : 'your companion') : (isAr ? 'رفيقك' : 'your companion');
-    const personalityDesc = isAr
-      ? `شخصيتك من نوع ${analysis.dominant_type}، وده يعني إنك شخص ${analysis.dominant_type === 'ANALYTICAL' ? 'تحليلي' : analysis.dominant_type === 'EMOTIONAL' ? 'عاطفي' : analysis.dominant_type === 'SOCIAL' ? 'اجتماعي' : 'مستقل'}`
-      : `Your personality is ${analysis.dominant_type}, which means you are a ${analysis.dominant_type === 'ANALYTICAL' ? 'analytical' : analysis.dominant_type === 'EMOTIONAL' ? 'emotional' : analysis.dominant_type === 'SOCIAL' ? 'social' : 'independent'} person.`;
-    
-    if (userName && twinName) {
-      // ✅ حالة كاملة: اسم المستخدم + اسم التوأم + تحليل
-      return (
-        <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
-          <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
-            <View style={s.logoCircle}>
-              <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            </View>
-          </Animated.View>
-          <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
-            {isAr ? `مرحباً ${userName} ${userLabel}!` : `Hello ${userName}, ${userLabel}!`}
-          </Text>
-          <Text style={[s.welcomeSub, isDark && { color: '#CCC' }]}>
-            {isAr
-              ? `أنا ${twinName}، ${twinLabel} الرقمي. ${personalityDesc}`
-              : `I'm ${twinName}, your digital ${twinLabel}. ${personalityDesc}`}
-          </Text>
-          <Text style={[s.welcomeSub, isDark && { color: '#CCC', marginTop: 8 }]}>
-            {isAr ? 'أنا سعيدة إننا هنبدأ رحلتنا مع بعض 💜' : 'I am so happy we are starting this journey together 💜'}
-          </Text>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace('/chat')}>
-            <ArrowRight size={18} stroke="#FFF" />
-            <Text style={s.primaryBtnText}>{isAr ? 'ابدأ الرحلة' : 'Start the journey'}</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      );
-    } else {
-      // ✅ حالة التخطي: اسم المستخدم غير معروف
-      return (
-        <SafeAreaView style={[s.center, isDark && { backgroundColor: '#1A1A1A' }]}>
-          <Animated.View style={{ transform: [{ scale }, { translateY }], marginBottom: 16 }}>
-            <View style={s.logoCircle}>
-              <Image source={require('../assets/icon.png')} style={{ width: 48, height: 48 }} resizeMode="contain" />
-            </View>
-          </Animated.View>
-          <Text style={[s.welcomeTitle, isDark && { color: '#FFF' }]}>
-            {isAr ? `مرحباً!` : `Hello!`}
-          </Text>
-          <Text style={[s.welcomeSub, isDark && { color: '#CCC' }]}>
-            {isAr
-              ? `أنا ${twinName || 'توأمك'}، ${twinLabel} الرقمي.`
-              : `I'm ${twinName || 'your twin'}, your digital ${twinLabel}.`}
-          </Text>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => router.replace('/chat')}>
-            <ArrowRight size={18} stroke="#FFF" />
-            <Text style={s.primaryBtnText}>{isAr ? 'ابدأ الرحلة' : 'Start the journey'}</Text>
-          </TouchableOpacity>
-        </SafeAreaView>
-      );
-    }
-  }
+  const currentQ = questions[step];
 
   return (
-    <SafeAreaView style={[s.container, isDark && { backgroundColor: '#1A1A1A' }]}>
-      <ScrollView contentContainerStyle={{ flex: 1, padding: 24, justifyContent: 'center' }}>
-        <TouchableOpacity style={s.skipBtn} onPress={skip}><Text style={s.skipText}>{isAr ? 'تخطي ←' : 'Skip →'}</Text></TouchableOpacity>
-
-        {/* شعار التطبيق المتحرك */}
-        <Animated.View style={{ transform: [{ scale }, { translateY }], alignSelf: 'center', marginBottom: 20 }}>
-          <View style={s.mascotCircle}>
-            <Image source={require('../assets/icon.png')} style={{ width: 36, height: 36 }} resizeMode="contain" />
-          </View>
-        </Animated.View>
-
-        {step === 1 && (<>
-          <Text style={[s.progress, isDark && { color: '#CCC' }]}>{questionStep + 1} / {questions.length}</Text>
-          <View style={s.progressBar}><View style={[s.progressFill, { width: `${((questionStep + 1) / questions.length) * 100}%` }]} /></View>
-          <Text style={[s.question, isDark && { color: '#FFF' }]}>{questions[questionStep].q}</Text>
-          {questions[questionStep].o.map((opt, i) => (
-            <TouchableOpacity key={i} style={[s.option, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444' }]} onPress={() => pickAnswer(opt)}>
-              <Text style={[s.optionText, isDark && { color: '#FFF' }]}>{opt}</Text>
-            </TouchableOpacity>
-          ))}
-        </>)}
-
-        {step === 2 && (<>
-          <Text style={[s.sectionTitle, isDark && { color: '#FFF' }]}>
-            {isAr ? 'هل هناك شيء تريد أن يعرفه توأمك عنك؟' : 'Is there anything you want your twin to know about you?'}
-          </Text>
-          <TextInput style={[s.textArea, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444', color: '#FFF' }]} multiline numberOfLines={6} placeholder={isAr ? 'مثلاً: أحب القهوة...' : 'e.g. I love coffee...'} placeholderTextColor="#999" value={freeInfo} onChangeText={setFreeInfo} />
-          <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(3)}><Text style={s.primaryBtnText}>{isAr ? 'متابعة' : 'Continue'}</Text></TouchableOpacity>
-        </>)}
-
-        {step === 3 && (<>
-          <Text style={[s.sectionTitle, isDark && { color: '#FFF' }]}>{isAr ? 'اختر جنس توأمك' : 'Choose your twin gender'}</Text>
-          <View style={s.genderRow}>
-            {(['female', 'male'] as TwinGender[]).map(g => (
-              <TouchableOpacity key={g} style={[s.genderCard, twinGender === g && s.selectedCard, isDark && { backgroundColor: '#2A2A2A', borderColor: twinGender === g ? '#D8B4FE' : '#444' }]} onPress={() => setTwinGender(g)}>
-                <View style={s.genderIconCircle}>
-                  <User size={32} stroke={isDark ? '#D8B4FE' : '#6B21A8'} />
-                </View>
-                <Text style={[s.genderText, isDark && { color: '#FFF' }]}>{g === 'female' ? (isAr ? 'أنثى' : 'Female') : (isAr ? 'ذكر' : 'Male')}</Text>
-              </TouchableOpacity>
+    <SafeAreaView style={[s.safe, isDark && { backgroundColor:'#1A1A1A' }]}>
+      <ScrollView contentContainerStyle={s.scroll} keyboardShouldPersistTaps="handled">
+        <Animated.View style={[s.card, isDark && { backgroundColor:'#2A2A2A', borderColor:'#444' }, { opacity:fadeAnim }]}>
+          {/* شريط التقدم */}
+          <View style={s.progressBar}>
+            {questions.map((_, i) => (
+              <View key={i} style={[s.dot, i <= step && s.dotActive]} />
             ))}
           </View>
-          <TouchableOpacity style={s.primaryBtn} onPress={() => setStep(4)}><Text style={s.primaryBtnText}>{isAr ? 'متابعة' : 'Continue'}</Text></TouchableOpacity>
-        </>)}
 
-        {step === 4 && (<>
-          <Text style={[s.sectionTitle, isDark && { color: '#FFF' }]}>{isAr ? 'أخبرنا عنك وعن توأمك' : 'Tell us about you and your twin'}</Text>
-          <TextInput style={[s.input, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444', color: '#FFF' }]} placeholder={isAr ? 'اسمك' : 'Your name'} placeholderTextColor="#999" value={userName} onChangeText={setUserName} />
-          <TextInput style={[s.input, isDark && { backgroundColor: '#2A2A2A', borderColor: '#444', color: '#FFF' }]} placeholder={isAr ? 'اسم توأمك' : 'Your twin name'} placeholderTextColor="#999" value={twinName} onChangeText={setTwinName} />
-          <TouchableOpacity style={[s.primaryBtn, (!userName || !twinName) && { opacity: 0.5 }]} onPress={handleFinalSubmit} disabled={!userName || !twinName}>
-            <Text style={s.primaryBtnText}>{isAr ? 'إنشاء توأمي' : 'Create My Twin'}</Text>
-          </TouchableOpacity>
-        </>)}
+          {!isLastQuestion ? (
+            <>
+              <Text style={[s.question, isDark && { color:'#FFF' }]}>{currentQ.q}</Text>
+              {currentQ.options.map((opt, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[s.option, isDark && { borderColor:'#444' }]}
+                  onPress={() => handleAnswer(currentQ.id, opt)}
+                >
+                  <Text style={[s.optionText, isDark && { color:'#CCC' }]}>{opt}</Text>
+                </TouchableOpacity>
+              ))}
+              {step > 0 && (
+                <TouchableOpacity style={s.backBtn} onPress={handleBack}>
+                  <ArrowLeft size={18} stroke={isDark?'#D8B4FE':'#6B21A8'} />
+                  <Text style={[s.backText, isDark && { color:'#D8B4FE' }]}>{isAr?'رجوع':'Back'}</Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            /* الشاشة النهائية */
+            <>
+              <Sparkles size={48} stroke={isDark?'#D8B4FE':'#6B21A8'} style={{ alignSelf:'center', marginBottom:20 }} />
+              <Text style={[s.title, isDark && { color:'#FFF' }]}>{isAr?'خطوة أخيرة!':'Final Step!'}</Text>
+              <Text style={[s.label, isDark && { color:'#CCC' }]}>{isAr?'ما اسمك؟':'What is your name?'}</Text>
+              <TextInput
+                style={[s.input, isDark && { backgroundColor:'#333', color:'#FFF', borderColor:'#444' }]}
+                placeholder={isAr?'أدخل اسمك':'Enter your name'}
+                placeholderTextColor="#999"
+                value={userName}
+                onChangeText={setUserName}
+              />
+              <Text style={[s.label, isDark && { color:'#CCC' }]}>{isAr?'أخبرني عن نفسك (اختياري)':'Tell me about yourself (optional)'}</Text>
+              <TextInput
+                style={[s.textArea, isDark && { backgroundColor:'#333', color:'#FFF', borderColor:'#444' }]}
+                placeholder={isAr?'اكتب بحرية...':'Write freely...'}
+                placeholderTextColor="#999"
+                value={freeInfo}
+                onChangeText={setFreeInfo}
+                multiline
+                numberOfLines={4}
+              />
+              <TouchableOpacity
+                style={[s.submitBtn, (!allAnswered || loading) && { opacity:0.6 }]}
+                onPress={handleFinalSubmit}
+                disabled={!allAnswered || loading}
+              >
+                {loading ? <ActivityIndicator color="#FFF" /> : (
+                  <>
+                    <Check size={20} stroke="#FFF" />
+                    <Text style={s.submitText}>{isAr?'ابدأ رحلتك':'Start Your Journey'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
+          )}
+        </Animated.View>
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8F6F2' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 },
-  mascotCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#F3F0FF', justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: '#D8B4FE', shadowColor: '#6B21A8', shadowOpacity: 0.2, shadowRadius: 10, elevation: 5 },
-  logoCircle: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#F3F0FF', justifyContent: 'center', alignItems: 'center', borderWidth: 4, borderColor: '#6B21A8', shadowColor: '#6B21A8', shadowOpacity: 0.3, shadowRadius: 12, elevation: 6 },
-  loadingText: { marginTop: 16, fontSize: 15, color: '#666' },
-  welcomeTitle: { fontSize: 24, fontWeight: '800', textAlign: 'center', marginBottom: 8 },
-  welcomeSub: { fontSize: 16, textAlign: 'center', marginBottom: 32, lineHeight: 24 },
-  skipBtn: { position: 'absolute', top: 20, right: 20, padding: 8, zIndex: 10 },
-  skipText: { color: '#6B21A8', fontSize: 15, fontWeight: '600' },
-  progress: { fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 8 },
-  progressBar: { height: 4, backgroundColor: '#E0D9F5', borderRadius: 2, marginBottom: 32 },
-  progressFill: { height: '100%', backgroundColor: '#6B21A8', borderRadius: 2 },
-  question: { fontSize: 22, fontWeight: '600', color: '#1A1A1A', textAlign: 'center', marginBottom: 32 },
-  option: { backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E0D9F5', shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 4, elevation: 2 },
-  optionText: { color: '#1A1A1A', textAlign: 'center', fontSize: 15 },
-  sectionTitle: { fontSize: 20, fontWeight: '700', color: '#1A1A1A', textAlign: 'center', marginBottom: 24 },
-  textArea: { backgroundColor: '#FFF', color: '#1A1A1A', padding: 16, borderRadius: 12, fontSize: 15, minHeight: 120, marginBottom: 24, borderWidth: 1, borderColor: '#E0D9F5' },
-  input: { backgroundColor: '#FFF', color: '#1A1A1A', padding: 16, borderRadius: 12, fontSize: 15, marginBottom: 16, borderWidth: 1, borderColor: '#E0D9F5' },
-  genderRow: { flexDirection: 'row', justifyContent: 'center', gap: 20, marginBottom: 32 },
-  genderCard: { flex: 1, padding: 24, borderRadius: 16, backgroundColor: '#FFF', alignItems: 'center', borderWidth: 2, borderColor: '#E0D9F5' },
-  selectedCard: { borderColor: '#6B21A8', backgroundColor: '#F3F0FF' },
-  genderIconCircle: { width: 64, height: 64, borderRadius: 32, backgroundColor: '#F3F0FF', justifyContent: 'center', alignItems: 'center', marginBottom: 8 },
-  genderText: { fontSize: 15, fontWeight: '600', color: '#1A1A1A' },
-  primaryBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#6B21A8', padding: 16, borderRadius: 14, shadowColor: '#6B21A8', shadowOpacity: 0.25, shadowRadius: 6, elevation: 4 },
-  primaryBtnText: { color: '#FFF', fontWeight: '700', fontSize: 16 },
+  safe: { flex:1 },
+  scroll: { flexGrow:1, justifyContent:'center', padding:20 },
+  card: { backgroundColor:'#FFF', borderRadius:24, padding:24, borderWidth:1, borderColor:'#F0F0F0', elevation:2 },
+  progressBar: { flexDirection:'row', justifyContent:'center', marginBottom:20, columnGap:6 },
+  dot: { width:8, height:8, borderRadius:4, backgroundColor:'#E0D9F5' },
+  dotActive: { backgroundColor:'#6B21A8', width:24 },
+  question: { fontSize:18, fontWeight:'700', color:'#1A1A1A', marginBottom:20, textAlign:'center' },
+  option: { padding:16, borderRadius:12, borderWidth:1.5, borderColor:'#E0D9F5', marginBottom:10 },
+  optionText: { fontSize:15, color:'#1A1A1A', textAlign:'center' },
+  backBtn: { flexDirection:'row', alignItems:'center', justifyContent:'center', marginTop:16, columnGap:6 },
+  backText: { color:'#6B21A8', fontWeight:'600' },
+  title: { fontSize:22, fontWeight:'800', color:'#1A1A1A', textAlign:'center', marginBottom:16 },
+  label: { fontSize:14, fontWeight:'600', color:'#666', marginBottom:8 },
+  input: { backgroundColor:'#F8F6F2', borderRadius:12, padding:14, fontSize:15, color:'#1A1A1A', borderWidth:1, borderColor:'#E0D9F5', marginBottom:16 },
+  textArea: { backgroundColor:'#F8F6F2', borderRadius:12, padding:14, fontSize:15, color:'#1A1A1A', borderWidth:1, borderColor:'#E0D9F5', minHeight:100, textAlignVertical:'top', marginBottom:20 },
+  submitBtn: { flexDirection:'row', alignItems:'center', justifyContent:'center', backgroundColor:'#6B21A8', padding:16, borderRadius:12, columnGap:8 },
+  submitText: { color:'#FFF', fontWeight:'700', fontSize:16 },
 });

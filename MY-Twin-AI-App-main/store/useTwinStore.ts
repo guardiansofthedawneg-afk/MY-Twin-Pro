@@ -47,6 +47,8 @@ interface TwinStore {
   voiceEnabled: boolean; setVoiceEnabled: (enabled: boolean) => void;
   replyStyle: ReplyStyle; setReplyStyle: (style: ReplyStyle) => void;
   menuVisible: boolean; openMenu: () => void; closeMenu: () => void;
+  hasUsedTrial: boolean; setHasUsedTrial: (val: boolean) => void;
+  twinTraits: string[]; setTwinTraits: (traits: string[]) => void;
   triggerHaptic: () => void;
   logout: () => void;
 }
@@ -69,6 +71,8 @@ const initialState = {
   voiceEnabled: false,
   replyStyle: 'medium' as ReplyStyle,
   menuVisible: false,
+  hasUsedTrial: false,
+  twinTraits: [] as string[],
 };
 
 export const useTwinStore = create<TwinStore>()(persist((set, get) => ({
@@ -114,6 +118,8 @@ export const useTwinStore = create<TwinStore>()(persist((set, get) => ({
 
   openMenu: () => set({ menuVisible: true }),
   closeMenu: () => set({ menuVisible: false }),
+  setHasUsedTrial: (val) => set({ hasUsedTrial: val }),
+  setTwinTraits: (traits) => set({ twinTraits: traits }),
 
   triggerHaptic: () => { if (!get().calmMode) Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); },
 
@@ -127,5 +133,6 @@ export const useTwinStore = create<TwinStore>()(persist((set, get) => ({
     energy: state.energy, calmMode: state.calmMode, theme: state.theme, lang: state.lang,
     tier: state.tier, points: state.points, badges: state.badges,
     voiceEnabled: state.voiceEnabled, replyStyle: state.replyStyle,
+    hasUsedTrial: state.hasUsedTrial, twinTraits: state.twinTraits,
   }),
 }));
